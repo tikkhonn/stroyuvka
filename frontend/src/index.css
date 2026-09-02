@@ -1,0 +1,31 @@
+@import "./styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-vka-cream text-gray-900 font-sans antialiased;
+}
+
+.vka-table th {
+  @apply bg-vka-navy text-white text-sm font-semibold px-3 py-2 border border-vka-navy-light;
+}
+
+.vka-table td {
+  @apply px-3 py-2 border border-gray-200 text-sm;
+}
+
+.vka-table tr:nth-child(even) {
+  @apply bg-white;
+}
+
+.vka-table tr:nth-child(odd) {
+  @apply bg-gray-50;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
