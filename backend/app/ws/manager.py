@@ -8,10 +8,6 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.active: dict[str, set[WebSocket]] = defaultdict(set)
 
-    async def connect(self, room: str, websocket: WebSocket) -> None:
-        await websocket.accept()
-        self.active[room].add(websocket)
-
     async def connect_many(self, rooms: list[str], websocket: WebSocket) -> None:
         await websocket.accept()
         for room in rooms:

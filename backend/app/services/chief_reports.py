@@ -182,6 +182,7 @@ async def build_trends(
                 trip=agg.trip,
                 leave=agg.leave,
                 dismissal=agg.dismissal,
+                duty=agg.duty,
             )
         )
 

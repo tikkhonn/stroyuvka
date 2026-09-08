@@ -2,7 +2,9 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChessboardResponse, ChessboardRow, ChessboardSickSummary, api } from "../api/client";
 import { todayLocal } from "../utils/date";
 import { StatusBadge } from "../components/StatusBadge";
+import { aggregateCellClass } from "../components/SummaryCards";
 import { formatAbsenceName } from "../constants/ranks";
+import { absenceCategoryTextClass } from "../constants/absenceCategories";
 
 type View = "faculty" | "location";
 type PanelFilter = "all" | "sick" | number;
@@ -123,7 +125,9 @@ function SickListTable({ summary }: { summary: ChessboardSickSummary }) {
           {summary.entries.map((entry, i) => (
             <tr key={entry.id}>
               <td className="text-gray-500">{i + 1}</td>
-              <td className="font-medium text-left">{formatAbsenceName(entry)}</td>
+              <td className={`font-medium text-left ${absenceCategoryTextClass("sick")}`}>
+                {formatAbsenceName(entry)}
+              </td>
               <td className="text-left">{entry.unit_name}</td>
               <td>{entry.faculty_name || "—"}</td>
               <td>{entry.location_name || "—"}</td>
@@ -197,7 +201,7 @@ export function ChessboardPage() {
   const renderDataCells = (row: ChessboardRow) => (
     <>
       {COLS.map((c) => (
-        <td key={c.key} className="text-center">
+        <td key={c.key} className={`text-center font-medium ${aggregateCellClass(c.key)}`}>
           {row[c.key]}
         </td>
       ))}
@@ -284,7 +288,7 @@ export function ChessboardPage() {
                       }`}
                     >
                       <div className="text-xs uppercase tracking-wide opacity-80">
-                        {section.locationId}
+                        Расположение
                       </div>
                       <div className="font-semibold text-base">{section.locationName}</div>
                       <div className={`text-xs mt-1 ${active ? "text-white/90" : "text-gray-500"}`}>
@@ -351,7 +355,7 @@ export function ChessboardPage() {
                         colSpan={tableColCount}
                         className="py-2 px-3 font-serif font-bold text-vka-navy text-sm uppercase tracking-wide border-y border-vka-navy/20"
                       >
-                        {section.locationId} — {section.locationName}
+                        {section.locationName}
                         <span className="ml-2 font-normal normal-case text-gray-600">
                           ({section.courses.length}{" "}
                           {section.courses.length === 1 ? "курс" : "курсов"})
@@ -371,13 +375,11 @@ export function ChessboardPage() {
                         {idx === 0 && panelFilter === "all" ? (
                           <td rowSpan={section.courses.length + (section.total ? 1 : 0)}>
                             <span className="font-medium">{section.locationName}</span>
-                            <span className="block text-xs text-gray-500">{section.locationId}</span>
                           </td>
                         ) : panelFilter !== "all" && typeof panelFilter === "number" ? (
                           idx === 0 ? (
                             <td rowSpan={section.courses.length + (section.total ? 1 : 0)}>
                               <span className="font-medium">{section.locationName}</span>
-                              <span className="block text-xs text-gray-500">{section.locationId}</span>
                             </td>
                           ) : null
                         ) : null}
@@ -395,7 +397,6 @@ export function ChessboardPage() {
                       {section.courses.length === 0 ? (
                         <td>
                           <span className="font-medium">{section.locationName}</span>
-                          <span className="block text-xs text-gray-500">{section.locationId}</span>
                         </td>
                       ) : null}
                       <td colSpan={2} className="font-semibold">

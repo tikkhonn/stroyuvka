@@ -148,7 +148,6 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full border rounded px-3 py-2 text-sm"
-                  placeholder="Иванов Иван Иванович"
                   required
                 />
               </div>

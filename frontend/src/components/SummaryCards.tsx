@@ -1,71 +1,53 @@
 import type { AttendanceAggregate } from "../api/client";
+import {
+  type AbsenceCategoryKey,
+  ABSENCE_CATEGORY_TEXT_CLASS,
+  AGGREGATE_NEUTRAL_TEXT_CLASS,
+  absenceCategoryTextClass,
+  aggregateBarClass,
+} from "../constants/absenceCategories";
 
 type SummaryCardsProps = {
   agg: AttendanceAggregate;
-  editableTotalList?: boolean;
-  totalListDraft?: string;
-  onTotalListChange?: (value: string) => void;
-  onTotalListBlur?: () => void;
-  totalListDisabled?: boolean;
 };
 
-export function SummaryCards({
-  agg,
-  editableTotalList,
-  totalListDraft,
-  onTotalListChange,
-  onTotalListBlur,
-  totalListDisabled,
-}: SummaryCardsProps) {
-  const absentCount =
-    agg.duty + agg.trip + agg.leave + agg.sick + agg.dismissal + agg.away_dorm + agg.other;
-  const draftTotal = Number(totalListDraft);
-  const totalListValue =
-    editableTotalList && totalListDraft !== undefined && !Number.isNaN(draftTotal)
-      ? draftTotal
-      : agg.total_list;
-  const presentValue =
-    editableTotalList && totalListDraft !== undefined && !Number.isNaN(draftTotal)
-      ? Math.max(0, draftTotal - absentCount)
-      : agg.present;
+const NEUTRAL_CLASS = AGGREGATE_NEUTRAL_TEXT_CLASS;
 
-  const items = [
-    { key: "total_list", label: "По списку", value: totalListValue, editable: editableTotalList },
-    { key: "present", label: "Налицо", value: presentValue, editable: false },
-    { key: "duty", label: "Наряд", value: agg.duty, editable: false },
-    { key: "trip", label: "Командировка", value: agg.trip, editable: false },
-    { key: "leave", label: "Отпуск", value: agg.leave, editable: false },
-    { key: "sick", label: "Болен", value: agg.sick, editable: false },
-    { key: "dismissal", label: "Увольнение", value: agg.dismissal, editable: false },
-    { key: "away_dorm", label: "Вне общежития", value: agg.away_dorm, editable: false },
-    { key: "other", label: "Прочее", value: agg.other, editable: false },
+export function SummaryCards({ agg }: SummaryCardsProps) {
+  const items: {
+    key: keyof AttendanceAggregate;
+    label: string;
+    value: number;
+    valueClass: string;
+    barClass: string;
+  }[] = [
+    { key: "total_list", label: "По списку", value: agg.total_list, valueClass: NEUTRAL_CLASS, barClass: aggregateBarClass("total_list") },
+    { key: "present", label: "Налицо", value: agg.present, valueClass: NEUTRAL_CLASS, barClass: aggregateBarClass("present") },
+    { key: "duty", label: "Наряд", value: agg.duty, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.duty, barClass: aggregateBarClass("duty") },
+    { key: "trip", label: "Команд.", value: agg.trip, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.trip, barClass: aggregateBarClass("trip") },
+    { key: "leave", label: "Отпуск", value: agg.leave, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.leave, barClass: aggregateBarClass("leave") },
+    { key: "sick", label: "Болен", value: agg.sick, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.sick, barClass: aggregateBarClass("sick") },
+    { key: "dismissal", label: "Увольн.", value: agg.dismissal, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.dismissal, barClass: aggregateBarClass("dismissal") },
+    { key: "away_dorm", label: "Вне общ.", value: agg.away_dorm, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.away_dorm, barClass: aggregateBarClass("away_dorm") },
+    { key: "other", label: "Прочее", value: agg.other, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.other, barClass: aggregateBarClass("other") },
   ];
 
   return (
-    <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3 mb-6">
+    <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3 mb-8">
       {items.map((item) => (
-        <div
-          key={item.key}
-          className="bg-white border border-gray-200 rounded-lg p-3 text-center shadow-sm"
-        >
-          {item.editable ? (
-            <input
-              type="number"
-              min={0}
-              value={totalListDraft ?? String(item.value)}
-              disabled={totalListDisabled}
-              onChange={(e) => onTotalListChange?.(e.target.value)}
-              onBlur={onTotalListBlur}
-              className="w-full text-center text-2xl font-bold text-vka-navy border border-gray-300 rounded px-1 py-0.5 disabled:bg-gray-100"
-            />
-          ) : (
-            <p className="text-2xl font-bold text-vka-navy">{item.value}</p>
-          )}
-          <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide leading-tight">
+        <div key={item.key} className="stat-card !p-3 text-center">
+          <div className={`stat-card__bar ${item.barClass}`} aria-hidden />
+          <p className={`text-2xl font-serif font-bold ${item.valueClass}`}>{item.value}</p>
+          <p className="text-[10px] text-gray-500 mt-2 uppercase tracking-wide leading-tight">
             {item.label}
           </p>
         </div>
       ))}
     </div>
   );
+}
+
+export function aggregateCellClass(key: keyof AttendanceAggregate): string {
+  if (key === "total_list" || key === "present") return NEUTRAL_CLASS;
+  return absenceCategoryTextClass(key as AbsenceCategoryKey);
 }

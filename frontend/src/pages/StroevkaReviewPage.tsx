@@ -11,19 +11,24 @@ import { SummaryCards } from "../components/SummaryCards";
 import { StatusBadge } from "../components/StatusBadge";
 import { onWsEvent } from "../api/ws";
 import { formatAbsenceName } from "../constants/ranks";
-import { formatAbsenceCategory } from "../constants/absenceCategories";
+import { formatAbsenceCategory, absenceCategoryTextClass } from "../constants/absenceCategories";
 import { todayLocal } from "../utils/date";
 
 function AbsencesList({ rows }: { rows: AbsenceEntry[] }) {
   if (!rows.length) return <p className="text-sm text-gray-500">Отсутствующих нет</p>;
   return (
     <ul className="text-sm space-y-1">
-      {rows.map((r) => (
+      {rows.map((r) => {
+        const colorClass = absenceCategoryTextClass(r.category_code);
+        return (
         <li key={r.id}>
-          <span className="font-medium">{formatAbsenceName(r)}</span> —{" "}
-          {formatAbsenceCategory(r.category_code, r.status_date)}
+          <span className={`font-medium ${colorClass}`}>{formatAbsenceName(r)}</span> —{" "}
+          <span className={colorClass}>
+            {formatAbsenceCategory(r.category_code, r.status_date)}
+          </span>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
@@ -67,8 +72,7 @@ function CourseCard({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="font-medium text-vka-navy">
-          {open ? "▼" : "▶"} {course.course_name}{" "}
-          <span className="font-mono text-xs text-gray-500">id {course.course_id}</span>
+          {open ? "▼" : "▶"} {course.course_name}
         </span>
         {course.report_status && <StatusBadge status={course.report_status} />}
         {pending && (
@@ -118,8 +122,7 @@ function OfficersCard({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="font-medium text-vka-navy">
-          {open ? "▼" : "▶"} Офицеры / постоянный состав{" "}
-          <span className="font-mono text-xs text-gray-500">id {officers.unit_id}</span>
+          {open ? "▼" : "▶"} Офицеры / постоянный состав
         </span>
         {officers.report_status && <StatusBadge status={officers.report_status} />}
         <span className="text-sm text-gray-600 ml-auto">

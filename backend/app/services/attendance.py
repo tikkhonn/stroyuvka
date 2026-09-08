@@ -10,12 +10,19 @@ from app.core.enums import (
     ReportStatus,
     UnitType,
 )
-from app.models import AbsenceEntry, CourseReport, Unit, UnitStrength
+from app.models import AbsenceEntry, CourseReport, FacultyReport, Person, Unit
 from app.schemas import (
     AbsenceEntryCreate,
     AbsenceEntryRead,
     AttendanceAggregate,
     AttendanceSnapshot,
+    PersonAttendanceRow,
+)
+from app.services.people import (
+    count_active_people,
+    display_last_name,
+    list_people,
+    person_to_read,
 )
 
 ABSENT_CODES = tuple(
@@ -51,16 +58,25 @@ def empty_aggregate() -> AttendanceAggregate:
 def sum_aggregates(parts: list[AttendanceAggregate]) -> AttendanceAggregate:
     if not parts:
         return empty_aggregate()
+    total_list = sum(p.total_list for p in parts)
+    duty = sum(p.duty for p in parts)
+    trip = sum(p.trip for p in parts)
+    leave = sum(p.leave for p in parts)
+    sick = sum(p.sick for p in parts)
+    dismissal = sum(p.dismissal for p in parts)
+    away_dorm = sum(p.away_dorm for p in parts)
+    other = sum(p.other for p in parts)
+    total_absent = duty + trip + leave + sick + dismissal + away_dorm + other
     return AttendanceAggregate(
-        total_list=sum(p.total_list for p in parts),
-        present=sum(p.present for p in parts),
-        duty=sum(p.duty for p in parts),
-        trip=sum(p.trip for p in parts),
-        leave=sum(p.leave for p in parts),
-        sick=sum(p.sick for p in parts),
-        dismissal=sum(p.dismissal for p in parts),
-        away_dorm=sum(p.away_dorm for p in parts),
-        other=sum(p.other for p in parts),
+        total_list=total_list,
+        present=max(0, total_list - total_absent),
+        duty=duty,
+        trip=trip,
+        leave=leave,
+        sick=sick,
+        dismissal=dismissal,
+        away_dorm=away_dorm,
+        other=other,
     )
 
 
@@ -89,13 +105,9 @@ def aggregate_from_entries(
             counts[AbsenceCategoryCode.OTHER] += 1
 
     absent = sum(counts.values())
-    if absent > total_list:
-        raise ValueError(
-            f"Отсутствующих ({absent}) больше, чем по списку ({total_list})"
-        )
     return AttendanceAggregate(
         total_list=total_list,
-        present=total_list - absent,
+        present=max(0, total_list - absent),
         duty=counts[AbsenceCategoryCode.DUTY],
         trip=counts[AbsenceCategoryCode.TRIP],
         leave=counts[AbsenceCategoryCode.LEAVE],
@@ -138,27 +150,17 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
             "ADD COLUMN IF NOT EXISTS rank VARCHAR(64) DEFAULT ''"
         )
     )
+    await session.execute(
+        text(
+            "ALTER TABLE absence_entries "
+            "ADD COLUMN IF NOT EXISTS person_id INTEGER REFERENCES people(id)"
+        )
+    )
     await session.flush()
 
 
 async def get_unit_strength(session: AsyncSession, unit_id: int) -> int:
-    row = await session.get(UnitStrength, unit_id)
-    return row.total_list if row else 0
-
-
-async def set_unit_strength(
-    session: AsyncSession, unit_id: int, total_list: int
-) -> UnitStrength:
-    if total_list < 0:
-        raise ValueError("Численность по списку не может быть отрицательной")
-    row = await session.get(UnitStrength, unit_id)
-    if row is None:
-        row = UnitStrength(unit_id=unit_id, total_list=total_list)
-        session.add(row)
-    else:
-        row.total_list = total_list
-    await session.flush()
-    return row
+    return await count_active_people(session, unit_id)
 
 
 async def list_absence_entries(
@@ -182,7 +184,7 @@ async def list_absence_entries(
     return visible
 
 
-async def _entry_visible_on_date(entry: AbsenceEntry, report_date: date) -> bool:
+def _entry_visible_on_date(entry: AbsenceEntry, report_date: date) -> bool:
     code = _normalize_code(entry.category_code)
     if code in PERSISTENT_ABSENCE_CODES:
         return entry.status_date <= report_date
@@ -227,7 +229,7 @@ async def add_absence_entry(
     unit_id: int,
     report_date: date,
     body: AbsenceEntryCreate,
-) -> tuple[AbsenceEntry, bool]:
+) -> tuple[list[AbsenceEntry], bool]:
     unit = await session.get(Unit, unit_id)
     if not unit or not unit.is_active:
         raise ValueError("Подразделение не найдено")
@@ -238,14 +240,6 @@ async def add_absence_entry(
     if code not in ABSENT_CODES:
         raise ValueError("Некорректная категория отсутствия")
 
-    last_name = body.last_name.strip()
-    if not last_name:
-        raise ValueError("Укажите фамилию")
-
-    rank = body.rank.strip()
-    if not rank:
-        raise ValueError("Укажите звание")
-
     detail = (body.note or "").strip()
     if code.value in DETAIL_REQUIRED_CODES and not detail:
         label = next(l for c, l, _ in ABSENCE_CATEGORY_DEFS if c == code.value)
@@ -253,6 +247,21 @@ async def add_absence_entry(
 
     entries = await list_absence_entries(session, unit_id, report_date)
     total = await get_unit_strength(session, unit_id)
+
+    if body.person_ids:
+        created = await _add_absences_for_people(
+            session, unit, report_date, code, detail or None, body.person_ids, entries, total
+        )
+        notify = await mark_course_changed_if_submitted(session, unit, report_date)
+        return created, notify
+
+    last_name = body.last_name.strip()
+    rank = body.rank.strip()
+    if not last_name:
+        raise ValueError("Укажите фамилию")
+    if not rank:
+        raise ValueError("Укажите звание")
+
     if len(entries) + 1 > total:
         raise ValueError(
             f"Нельзя добавить: отсутствующих станет {len(entries) + 1}, по списку {total}"
@@ -270,7 +279,7 @@ async def add_absence_entry(
 
     entry = AbsenceEntry(
         unit_id=unit_id,
-        status_date=report_date,  # дата начала (для длительных категорий сохраняется)
+        status_date=report_date,
         category_code=code,
         rank=rank,
         last_name=last_name,
@@ -279,7 +288,48 @@ async def add_absence_entry(
     session.add(entry)
     await session.flush()
     notify = await mark_course_changed_if_submitted(session, unit, report_date)
-    return entry, notify
+    return [entry], notify
+
+
+async def _add_absences_for_people(
+    session: AsyncSession,
+    unit: Unit,
+    report_date: date,
+    code: AbsenceCategoryCode,
+    note: str | None,
+    person_ids: list[int],
+    entries: list[AbsenceEntry],
+    total: int,
+) -> list[AbsenceEntry]:
+    unique_ids = list(dict.fromkeys(person_ids))
+    if not unique_ids:
+        raise ValueError("Выберите людей из списка")
+    taken = {e.person_id for e in entries if e.person_id}
+    if len(entries) + len(unique_ids) > total:
+        raise ValueError(
+            f"Нельзя добавить: отсутствующих станет {len(entries) + len(unique_ids)}, по списку {total}"
+        )
+    created: list[AbsenceEntry] = []
+    for person_id in unique_ids:
+        if person_id in taken:
+            raise ValueError("Один из выбранных уже отмечен отсутствующим")
+        person = await session.get(Person, person_id)
+        if not person or person.unit_id != unit.id or not person.is_active:
+            raise ValueError("Человек не найден в списке подразделения")
+        entry = AbsenceEntry(
+            unit_id=unit.id,
+            person_id=person.id,
+            status_date=report_date,
+            category_code=code,
+            rank=person.rank,
+            last_name=display_last_name(person),
+            note=note,
+        )
+        session.add(entry)
+        created.append(entry)
+        taken.add(person.id)
+    await session.flush()
+    return created
 
 
 async def delete_absence_entry(
@@ -302,21 +352,7 @@ async def compute_aggregate_for_unit(
     session: AsyncSession,
     unit_id: int,
     report_date: date,
-    composition=None,
-    include_children: bool = False,
 ) -> AttendanceAggregate:
-    if include_children:
-        from app.services.org import get_courses_for_faculty
-
-        unit = await session.get(Unit, unit_id)
-        if unit and unit.type == UnitType.FACULTY:
-            parts = [
-                await compute_aggregate_for_unit(session, c.id, report_date)
-                for c in await get_courses_for_faculty(session, unit_id)
-            ]
-            parts.append(await compute_aggregate_for_unit(session, unit_id, report_date))
-            return sum_aggregates(parts)
-
     total = await get_unit_strength(session, unit_id)
     entries = await list_absence_entries(session, unit_id, report_date)
     return aggregate_from_entries(total, entries)
@@ -369,7 +405,6 @@ async def get_attendance_snapshot(
     unit_id: int,
     report_date: date,
     editable: bool = True,
-    composition_filter=None,
 ) -> AttendanceSnapshot:
     unit = await session.get(Unit, unit_id)
     if not unit:
@@ -389,11 +424,31 @@ async def get_attendance_snapshot(
         changes_pending_dpf = bool(report.changes_pending_dpf)
         changes_pending_dpa = bool(report.changes_pending_dpa)
         is_editing = bool(report.is_editing)
+    elif unit.type == UnitType.FACULTY:
+        fac_report = await _get_faculty_report(session, unit_id, report_date)
+        if fac_report:
+            report_status = fac_report.status
+            is_editing = bool(fac_report.is_editing)
+
+    by_person = {e.person_id: e for e in entries if e.person_id}
+    people_rows: list[PersonAttendanceRow] = []
+    for person in await list_people(session, unit_id, include_inactive=False):
+        linked = by_person.get(person.id)
+        people_rows.append(
+            PersonAttendanceRow(
+                person=person_to_read(person),
+                absence_id=linked.id if linked else None,
+                category_code=_normalize_code(linked.category_code) if linked else None,
+                note=linked.note if linked else None,
+                editable=editable,
+            )
+        )
 
     entry_reads = [
         AbsenceEntryRead(
             id=e.id,
             unit_id=e.unit_id,
+            person_id=e.person_id,
             status_date=e.status_date,
             category_code=_normalize_code(e.category_code),
             rank=e.rank or "",
@@ -411,7 +466,7 @@ async def get_attendance_snapshot(
         aggregate=aggregate,
         total_list=total,
         absences=entry_reads,
-        people=[],
+        people=people_rows,
         report_status=report_status,
         editable=editable,
         changes_pending_dpf=changes_pending_dpf,
@@ -420,18 +475,13 @@ async def get_attendance_snapshot(
     )
 
 
-async def update_strength_and_validate(
-    session: AsyncSession, unit_id: int, report_date: date, total_list: int
-) -> tuple[AttendanceSnapshot, bool]:
-    unit = await session.get(Unit, unit_id)
-    if not unit:
-        raise ValueError("Подразделение не найдено")
-    entries = await list_absence_entries(session, unit_id, report_date)
-    if total_list < len(entries):
-        raise ValueError(
-            f"По списку ({total_list}) меньше числа отсутствующих ({len(entries)})"
+async def _get_faculty_report(
+    session: AsyncSession, faculty_id: int, report_date: date
+) -> FacultyReport | None:
+    result = await session.execute(
+        select(FacultyReport).where(
+            FacultyReport.faculty_id == faculty_id,
+            FacultyReport.report_date == report_date,
         )
-    await set_unit_strength(session, unit_id, total_list)
-    notify = await mark_course_changed_if_submitted(session, unit, report_date)
-    snap = await get_attendance_snapshot(session, unit_id, report_date, editable=True)
-    return snap, notify
+    )
+    return result.scalar_one_or_none()

@@ -3,13 +3,6 @@ import { DutyContact, api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { onWsEvent } from "../api/ws";
 
-const PHONES_HINT: Record<string, string> = {
-  dpk: "ДПФ вашего факультета и дежурные по курсам (ДПК). Свой номер не отображается.",
-  dpf: "ДПА, все ДПФ и ДПК вашего факультета — в порядке ДПА → ДПФ → ДПК. Свой номер не отображается.",
-  dpa: "Дежурные по факультетам (ДПФ). Свой номер не отображается.",
-  chief: "Дежурные ДПА и ДПФ на сегодня.",
-};
-
 const GROUP_LABELS: Record<string, string> = {
   dpa: "ДПА",
   dpf: "ДПФ",
@@ -90,10 +83,7 @@ export function PhonesPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-2">Телефоны</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        {PHONES_HINT[shell === "chief" ? "chief" : role] || "Контакты дежурных на сегодня."}
-      </p>
+      <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">Телефоны</h2>
 
       {loading ? (
         <p>Загрузка...</p>

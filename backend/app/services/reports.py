@@ -86,7 +86,7 @@ async def submit_course_report(
 
     total = await get_unit_strength(session, course_id)
     if total < 1:
-        raise ValueError("Укажите численность «по списку» перед отправкой")
+        raise ValueError("Загрузите список личного состава перед отправкой")
 
     try:
         aggregate = await compute_aggregate_for_unit(session, course_id, report_date)
@@ -206,7 +206,6 @@ async def submit_faculty_report(
         faculty_id,
         report_date,
     )
-    officer_agg.model_validate(officer_agg.model_dump())
 
     officer_report = await _get_or_create_officer_report(session, faculty_id, report_date)
     officer_report.status = ReportStatus.SUBMITTED
@@ -237,14 +236,6 @@ async def submit_faculty_report(
 
     await session.flush()
     return faculty_report, is_resubmit
-
-
-async def approve_faculty_report(
-    session: AsyncSession, faculty_id: int, report_date: date
-) -> FacultyReport:
-    """Совместимость: то же, что первая отправка строевки факультета."""
-    report, _ = await submit_faculty_report(session, faculty_id, report_date)
-    return report
 
 
 async def reject_faculty_report(

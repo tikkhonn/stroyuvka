@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -107,32 +106,17 @@ class CourseBulkResult(BaseModel):
     skipped: list[CourseBulkSkippedItem]
 
 
-class UnitTree(UnitRead):
-    children: list["UnitTree"] = []
-
-
 # --- People ---
 
 
-class PersonCreate(BaseModel):
-    unit_id: int
-    rank: str
-    last_name: str
-    first_name: str
-    middle_name: str | None = None
-    composition: Composition
-    position: str | None = None
-    is_active: bool = True
+class PersonRosterWrite(BaseModel):
+    rank: str = Field(min_length=1, max_length=64)
+    full_name: str = Field(min_length=1, max_length=256, description="Фамилия и инициалы, напр. Иванов И.И.")
 
 
-class PersonUpdate(BaseModel):
-    unit_id: int | None = None
+class PersonRosterPatch(BaseModel):
     rank: str | None = None
-    last_name: str | None = None
-    first_name: str | None = None
-    middle_name: str | None = None
-    composition: Composition | None = None
-    position: str | None = None
+    full_name: str | None = None
     is_active: bool | None = None
 
 
@@ -147,6 +131,7 @@ class PersonRead(ORMModel):
     position: str | None
     is_active: bool
     full_name: str = ""
+    display_name: str = ""
 
 
 # --- Absence ---
@@ -172,32 +157,32 @@ class AbsenceCategoryRead(ORMModel):
     reasons: list[AbsenceReasonRead] = []
 
 
-class PersonStatusUpdate(BaseModel):
-    person_id: int
-    reason_id: int | None = None
-    note: str | None = None
-
-
 class AbsenceEntryCreate(BaseModel):
     category_code: AbsenceCategoryCode
-    rank: str = Field(min_length=1, max_length=64)
-    last_name: str = Field(min_length=1, max_length=128)
+    rank: str = ""
+    last_name: str = ""
     note: str | None = None
+    person_ids: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_identity(self) -> "AbsenceEntryCreate":
+        if self.person_ids:
+            return self
+        if not self.rank.strip() or not self.last_name.strip():
+            raise ValueError("Укажите звание и фамилию или выберите людей из списка")
+        return self
 
 
 class AbsenceEntryRead(BaseModel):
     id: int
     unit_id: int
+    person_id: int | None = None
     status_date: date
     category_code: AbsenceCategoryCode
     rank: str
     last_name: str
     note: str | None = None
     editable: bool = True
-
-
-class StrengthUpdate(BaseModel):
-    total_list: int = Field(ge=0)
 
 
 class AttendanceAggregate(BaseModel):
@@ -222,7 +207,7 @@ class AttendanceAggregate(BaseModel):
             + self.away_dorm
             + self.other
         )
-        if self.total_list != self.present + total_absent:
+        if self.present != max(0, self.total_list - total_absent):
             raise ValueError(
                 f"Сходимость нарушена: по списку {self.total_list}, "
                 f"налицо {self.present} + отсутствующие {total_absent}"
@@ -232,10 +217,11 @@ class AttendanceAggregate(BaseModel):
 
 class PersonAttendanceRow(BaseModel):
     person: PersonRead
-    reason_id: int | None
-    reason_name: str | None
-    category_code: AbsenceCategoryCode | None
-    note: str | None
+    absence_id: int | None = None
+    reason_id: int | None = None
+    reason_name: str | None = None
+    category_code: AbsenceCategoryCode | None = None
+    note: str | None = None
     editable: bool = True
 
 
@@ -252,7 +238,6 @@ class AttendanceSnapshot(BaseModel):
     changes_pending_dpf: bool = False
     changes_pending_dpa: bool = False
     is_editing: bool = False
-    report_date: date | None = None
 
 
 class CourseStroevkaSummary(BaseModel):
@@ -277,27 +262,50 @@ class FacultyStroevkaBundle(BaseModel):
     submit_blockers: list[str] = []
 
 
-# --- Reports ---
+class AttendanceUnitOption(BaseModel):
+    id: int
+    name: str
+    type: UnitType
+    kind: str
+
+
+class RosterParseRow(BaseModel):
+    row_number: int
+    rank: str
+    full_name: str
+    last_name: str = ""
+    first_name: str = ""
+    source: str = ""
+    action: str | None = None
+    person_id: int | None = None
+    warnings: list[str] = []
+
+
+class RosterParseError(BaseModel):
+    row_number: int | None = None
+    message: str
+
+
+class RosterImportPreview(BaseModel):
+    rows: list[RosterParseRow] = []
+    errors: list[RosterParseError] = []
+    to_add: int = 0
+    to_update: int = 0
+    to_restore: int = 0
+    to_deactivate: int = 0
+    can_apply: bool = False
+
+
+class RosterImportResult(BaseModel):
+    added: int = 0
+    updated: int = 0
+    restored: int = 0
+    deactivated: int = 0
+    total_list: int
 
 
 class RejectRequest(BaseModel):
     comment: str = Field(min_length=1)
-
-
-class CourseReportRead(ORMModel):
-    id: int
-    course_id: int
-    report_date: date
-    status: ReportStatus
-    reject_comment: str | None
-
-
-class FacultyReportRead(ORMModel):
-    id: int
-    faculty_id: int
-    report_date: date
-    status: ReportStatus
-    reject_comment: str | None
 
 
 class ChessboardRow(BaseModel):
@@ -411,6 +419,7 @@ class FacultyTodayBreakdown(BaseModel):
     trip: int
     leave: int
     dismissal: int
+    duty: int
 
 
 class TrendsResponse(BaseModel):
@@ -423,10 +432,31 @@ class TrendsResponse(BaseModel):
 # --- Chat ---
 
 
+class ChatAttachmentRead(ORMModel):
+    id: int
+    original_filename: str
+    content_type: str
+    size_bytes: int
+
+
+class ChatPendingUploadRead(BaseModel):
+    id: int
+    filename: str
+    content_type: str
+    size_bytes: int
+
+
 class ChatMessageCreate(BaseModel):
     recipient_kind: str
     recipient_id: int
-    body: str = Field(min_length=1)
+    body: str = ""
+    upload_ids: list[int] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def require_body_or_uploads(self) -> "ChatMessageCreate":
+        if not self.body.strip() and not self.upload_ids:
+            raise ValueError("Укажите текст или прикрепите файл")
+        return self
 
 
 class ChatMessageRead(ORMModel):
@@ -439,6 +469,7 @@ class ChatMessageRead(ORMModel):
     faculty_id: int | None
     body: str
     created_at: datetime
+    attachments: list[ChatAttachmentRead] = Field(default_factory=list)
 
 
 # --- Duty ---
@@ -477,12 +508,6 @@ class DutyContactRead(ORMModel):
     phone: str
     room: str | None
     note: str | None
-
-
-class RotateKeyResponse(BaseModel):
-    plain_key: str
-    rotated_at: datetime
-    message: str
 
 
 class DutyPostRead(ORMModel):
@@ -541,8 +566,3 @@ class UserRead(ORMModel):
     unit_id: int | None
     full_name: str
     is_active: bool
-
-
-class WSEvent(BaseModel):
-    type: str
-    payload: dict[str, Any] = {}

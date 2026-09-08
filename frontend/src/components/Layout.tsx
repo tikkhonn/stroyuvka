@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ChatUnreadProvider, useChatUnread } from "../context/ChatUnreadContext";
+import { Logo } from "./brand/Logo";
 import { DutyOnboardingProvider } from "./DutyOnboardingGate";
 
 const NAV_DPA = [
@@ -15,7 +16,7 @@ const NAV_DPA = [
 
 const NAV_DPF = [
   { to: "/stroevka", label: "Строевки курсов" },
-  { to: "/attendance", label: "Офицеры" },
+  { to: "/attendance", label: "Расход" },
   { to: "/chat", label: "Чат" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
@@ -35,6 +36,7 @@ const NAV_DPK = [
 const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
   admin: [
     { to: "/admin/units", label: "ОШС" },
+    { to: "/attendance", label: "Расход" },
     { to: "/admin/duty-contacts", label: "Дежурные" },
     { to: "/audit", label: "Журнал" },
     { to: "/help", label: "Инструкция" },
@@ -44,6 +46,16 @@ const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
     { to: "/trends", label: "Динамика" },
     { to: "/phones", label: "Телефоны" },
   ],
+};
+
+const SECONDARY_NAV_PATHS = new Set(["/shift-change", "/help"]);
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Администратор",
+  chief: "Начальник",
+  dpa: "ДПА",
+  dpf: "ДПФ",
+  dpk: "ДПК",
 };
 
 function navForSession(session: { shell: string; role: string }) {
@@ -57,20 +69,58 @@ function navForSession(session: { shell: string; role: string }) {
 
 function HeaderActions() {
   const { session, logout } = useAuth();
-
   if (!session) return null;
 
+  const roleLabel = ROLE_LABELS[session.role] || session.role.toUpperCase();
+
   return (
-    <div className="text-right text-sm shrink-0">
-      <p className="text-vka-gold-light font-medium">{session.display_name}</p>
-      <p className="text-gray-400 uppercase">{session.role}</p>
+    <div className="flex items-center gap-3 shrink-0">
+      <div className="hidden sm:block text-right">
+        <p className="text-sm font-medium text-white">{session.display_name}</p>
+        <p className="text-xs text-vka-gold/90">{roleLabel}</p>
+      </div>
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-vka-gold/20 ring-2 ring-vka-gold/30">
+        <span className="text-sm font-bold text-vka-gold">
+          {session.display_name.charAt(0).toUpperCase()}
+        </span>
+      </div>
       <button
         onClick={logout}
-        className="mt-2 text-xs text-gray-300 hover:text-white underline"
+        className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-gray-300 transition hover:border-vka-gold/50 hover:text-white"
       >
         Выход
       </button>
     </div>
+  );
+}
+
+function NavPill({
+  item,
+  active,
+  showUnread,
+}: {
+  item: { to: string; label: string };
+  active: boolean;
+  showUnread: boolean;
+}) {
+  return (
+    <Link
+      to={item.to}
+      className={`nav-pill ${
+        active
+          ? "nav-pill-active"
+          : showUnread
+            ? "bg-red-600/90 text-white ring-2 ring-red-400/50"
+            : "nav-pill-idle"
+      }`}
+    >
+      {item.label}
+      {showUnread && (
+        <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold">
+          !
+        </span>
+      )}
+    </Link>
   );
 }
 
@@ -79,52 +129,46 @@ export function Header() {
   const location = useLocation();
   const { navHasUnread } = useChatUnread();
   const nav = session ? navForSession(session) : [];
+  const primaryNav = nav.filter((item) => !SECONDARY_NAV_PATHS.has(item.to));
+  const secondaryNav = nav.filter((item) => SECONDARY_NAV_PATHS.has(item.to));
   const onChat = location.pathname === "/chat" || location.pathname.startsWith("/chat/");
 
+  const renderNavItem = (item: { to: string; label: string }) => {
+    const isChat = item.to === "/chat";
+    const active =
+      location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+    const showUnread = isChat && navHasUnread && !onChat;
+    return (
+      <NavPill key={item.to} item={item} active={active} showUnread={showUnread} />
+    );
+  };
+
   return (
-    <header className="bg-vka-navy text-white shadow-lg no-print">
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-vka-gold text-xs uppercase tracking-widest mb-1">
-              Министерство обороны Российской Федерации
-            </p>
-            <h1 className="font-serif text-xl md:text-2xl font-bold leading-tight">
-              Военно-космическая академия имени А.Ф. Можайского
-            </h1>
-            <p className="text-gray-300 text-sm mt-1">
-              Строевка — учёт расхода личного состава
-            </p>
+    <header className="sticky top-0 z-50 bg-vka-navy text-white shadow-vka-lg no-print border-b-2 border-vka-gold">
+      <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Logo className="h-10 w-auto shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-vka-gold/90 mb-0.5 truncate">
+                Пульс · ВКА
+              </p>
+              <h1 className="font-serif text-lg md:text-xl font-bold leading-tight truncate">
+                ПУЛЬС
+              </h1>
+            </div>
           </div>
           <HeaderActions />
         </div>
+
         {nav.length > 0 && (
-          <nav className="flex flex-wrap gap-1 mt-4 border-t border-vka-navy-light pt-3">
-            {nav.map((item) => {
-              const isChat = item.to === "/chat";
-              const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
-              const showUnread = isChat && navHasUnread && !onChat;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`relative px-3 py-1.5 rounded text-sm transition ${
-                    active
-                      ? "bg-vka-gold text-vka-navy font-semibold"
-                      : showUnread
-                        ? "bg-red-700 text-white font-semibold ring-2 ring-red-400"
-                        : "text-gray-200 hover:bg-vka-navy-light"
-                  }`}
-                >
-                  {item.label}
-                  {showUnread && (
-                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-                      !
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+          <nav className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-white/10">
+            <div className="flex flex-wrap gap-1.5">{primaryNav.map(renderNavItem)}</div>
+            {secondaryNav.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 ml-auto pl-3 border-l border-white/15">
+                {secondaryNav.map(renderNavItem)}
+              </div>
+            )}
           </nav>
         )}
       </div>
@@ -134,13 +178,18 @@ export function Header() {
 
 export function Footer() {
   return (
-    <footer className="bg-vka-navy text-gray-300 text-sm mt-auto no-print">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <p>197198, г. Санкт-Петербург, ул. Ждановская, д. 13</p>
-        <p className="mt-1">тел.: (812) 347-96-46, 347-97-70</p>
-        <p className="mt-2 text-gray-500 text-xs">
-          © Военно-космическая академия имени А.Ф. Можайского
-        </p>
+    <footer className="bg-vka-navy text-vka-gray text-sm mt-auto no-print border-t border-vka-gold/20">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Logo className="mt-0.5 h-8 w-auto shrink-0" />
+            <div>
+              <p className="font-serif text-vka-gold/90 text-sm">ВКА им. А.Ф. Можайского</p>
+              <p className="mt-1 text-xs">197198, г. Санкт-Петербург, ул. Ждановская, д. 13</p>
+            </div>
+          </div>
+          <p className="text-xs text-vka-gray/80">тел.: (812) 347-96-46, 347-97-70</p>
+        </div>
       </div>
     </footer>
   );
@@ -152,7 +201,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <DutyOnboardingProvider>
         <ChatUnreadProvider>
           <Header />
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">{children}</main>
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">{children}</main>
         </ChatUnreadProvider>
       </DutyOnboardingProvider>
       <Footer />

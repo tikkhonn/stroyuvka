@@ -17,14 +17,6 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def hash_duty_key(key: str) -> str:
-    return hash_password(key)
-
-
-def verify_duty_key(key: str, hashed: str) -> bool:
-    return verify_password(key, hashed)
-
-
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + (

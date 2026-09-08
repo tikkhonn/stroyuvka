@@ -1,7 +1,7 @@
 [project]
 name = "asmrlsp-backend"
 version = "0.1.0"
-description = "АСМРЛСП — учёт расхода личного состава ВКА"
+description = "ПУЛЬС — учёт расхода личного состава ВКА"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -13,6 +13,8 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "bcrypt>=4.0.0",
     "python-multipart>=0.0.12",
+    "openpyxl>=3.1.5",
+    "python-docx>=1.1.2",
 ]
 
 [build-system]

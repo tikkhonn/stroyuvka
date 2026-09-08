@@ -6,10 +6,6 @@ from app.models import Unit
 from app.services.unit_ids import parse_course_id
 
 
-async def get_unit(session: AsyncSession, unit_id: int) -> Unit | None:
-    return await session.get(Unit, unit_id)
-
-
 def _course_belongs_to_faculty(course_unit_id: int, faculty_unit_id: int) -> bool:
     try:
         fn, _cn = parse_course_id(course_unit_id)

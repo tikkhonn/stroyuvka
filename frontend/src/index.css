@@ -4,24 +4,141 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-vka-cream text-gray-900 font-sans antialiased;
+@layer base {
+  @font-face {
+    font-family: "Magistral";
+    font-style: normal;
+    font-weight: 400 500;
+    font-display: swap;
+    src: url("/fonts/Magistral-Medium.ttf") format("truetype");
+  }
+
+  @font-face {
+    font-family: "Magistral";
+    font-style: italic;
+    font-weight: 400 500;
+    font-display: swap;
+    src: url("/fonts/Magistral-MediumItalic.ttf") format("truetype");
+  }
+
+  @font-face {
+    font-family: "Magistral";
+    font-style: normal;
+    font-weight: 600 800;
+    font-display: swap;
+    src: url("/fonts/Magistral-Bold.ttf") format("truetype");
+  }
+
+  @font-face {
+    font-family: "Magistral";
+    font-style: italic;
+    font-weight: 600 800;
+    font-display: swap;
+    src: url("/fonts/Magistral-BoldItalic.ttf") format("truetype");
+  }
+
+  body {
+    @apply bg-vka-cream text-vka-navy font-sans antialiased;
+    font-family: Montserrat, system-ui, sans-serif;
+    background-image: radial-gradient(
+      ellipse 120% 80% at 50% -20%,
+      rgba(230, 189, 117, 0.08),
+      transparent 50%
+    );
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white border border-vka-gray-50 rounded-xl shadow-vka;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-gray-200/80 bg-white px-4 py-2.5 text-sm
+      shadow-sm transition placeholder:text-gray-400
+      focus:border-vka-gold focus:outline-none focus:ring-2 focus:ring-vka-gold/25;
+  }
+
+  .btn-gold {
+    @apply inline-flex items-center justify-center rounded-lg bg-vka-gold px-4 py-2.5
+      text-sm font-semibold text-vka-navy shadow-md transition
+      hover:bg-vka-gold-light hover:shadow-vka-glow
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .page-title {
+    @apply text-2xl md:text-3xl font-bold text-vka-navy tracking-tight;
+    font-family: Magistral, Montserrat, system-ui, sans-serif;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-gray-600 mt-1;
+  }
+
+  .nav-pill {
+    @apply relative rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-200;
+  }
+
+  .nav-pill-active {
+    @apply bg-vka-gold text-vka-navy shadow-md;
+  }
+
+  .nav-pill-idle {
+    @apply text-gray-300 hover:bg-white/10 hover:text-white;
+  }
+
+  .stat-card {
+    @apply relative overflow-hidden rounded-xl border border-gray-200/80 bg-white p-5 shadow-vka;
+  }
+
+  .stat-card__bar {
+    @apply absolute inset-x-0 top-0 h-1;
+  }
+
+  .login-screen {
+    @apply relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10;
+  }
+
+  .login-screen__photo {
+    @apply absolute inset-0;
+    background: radial-gradient(circle at 50% 45%, #0e3963 0%, #051d44 100%);
+  }
+
+  .login-screen__building {
+    @apply absolute inset-0 bg-cover bg-bottom bg-no-repeat;
+    background-image: url("/images/login-title-bg.png");
+    mix-blend-mode: screen;
+  }
+
+  .login-screen__overlay {
+    @apply absolute inset-0;
+    background: linear-gradient(
+      180deg,
+      rgba(5, 29, 68, 0.35) 0%,
+      rgba(5, 29, 68, 0.15) 40%,
+      rgba(5, 29, 68, 0.55) 100%
+    );
+  }
+
+  .login-screen__card {
+    @apply rounded-2xl border border-white/25 bg-white p-8 shadow-vka-lg;
+  }
 }
 
 .vka-table th {
-  @apply bg-vka-navy text-white text-sm font-semibold px-3 py-2 border border-vka-navy-light;
+  @apply bg-vka-navy text-white text-sm font-semibold px-3 py-2.5 border border-vka-navy-light;
 }
 
 .vka-table td {
-  @apply px-3 py-2 border border-gray-200 text-sm;
+  @apply px-3 py-2.5 border border-gray-200/80 text-sm;
 }
 
-.vka-table tr:nth-child(even) {
+.vka-table tr:nth-child(even):not([class*="bg-"]) {
   @apply bg-white;
 }
 
-.vka-table tr:nth-child(odd) {
-  @apply bg-gray-50;
+.vka-table tr:nth-child(odd):not([class*="bg-"]) {
+  @apply bg-gray-50/80;
 }
 
 @media print {

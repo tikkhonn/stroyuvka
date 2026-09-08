@@ -12,6 +12,9 @@ import {
   YAxis,
 } from "recharts";
 import { TrendsResponse, api } from "../api/client";
+import { ABSENCE_CATEGORY_HEX } from "../constants/absenceCategories";
+import { Card, CardHeader } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
 import { todayLocal } from "../utils/date";
 
 const PERIODS = [
@@ -29,6 +32,56 @@ function shiftDate(iso: string, daysBack: number): string {
   const d = new Date(iso + "T12:00:00");
   d.setDate(d.getDate() - daysBack);
   return d.toISOString().slice(0, 10);
+}
+
+function shortFacultyName(name: string): string {
+  return name.replace(/^(\d+)\s*/, "$1 ");
+}
+
+type DayChartRow = {
+  date: string;
+  label: string;
+  sick: number;
+  trip: number;
+  dismissal: number;
+};
+
+function TrendLineChart({
+  data,
+  dataKey,
+  name,
+  color,
+}: {
+  data: DayChartRow[];
+  dataKey: keyof Pick<DayChartRow, "sick" | "trip" | "dismissal">;
+  name: string;
+  color: string;
+}) {
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+          <Tooltip
+            labelFormatter={(_, payload) =>
+              payload?.[0]?.payload?.date ? formatDay(String(payload[0].payload.date)) : ""
+            }
+          />
+          <Legend />
+          <Line
+            type="monotone"
+            dataKey={dataKey}
+            name={name}
+            stroke={color}
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 export function ChiefTrendsPage() {
@@ -54,16 +107,28 @@ export function ChiefTrendsPage() {
   const chartDays = useMemo(
     () =>
       (data?.days ?? []).map((d) => ({
-        ...d,
+        date: d.date,
         label: formatDay(d.date),
+        sick: d.sick,
+        trip: d.trip,
+        dismissal: d.dismissal,
       })),
     [data]
   );
 
-  const facultyBars = useMemo(
+  const facultyDutyBars = useMemo(
     () =>
       (data?.faculties_today ?? []).map((f) => ({
-        name: f.faculty_name.replace(/^(\d+)\s*/, "$1 "),
+        name: shortFacultyName(f.faculty_name),
+        duty: f.duty,
+      })),
+    [data]
+  );
+
+  const facultySummaryBars = useMemo(
+    () =>
+      (data?.faculties_today ?? []).map((f) => ({
+        name: shortFacultyName(f.faculty_name),
         sick: f.sick,
         trip: f.trip,
         leave: f.leave,
@@ -74,134 +139,60 @@ export function ChiefTrendsPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-2xl font-serif font-bold text-vka-navy">Динамика</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Изменение расхода по академии · {formatDay(fromDate)} — {formatDay(toDate)}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {PERIODS.map(({ days, label }) => (
-            <button
-              key={days}
-              type="button"
-              onClick={() => setPeriodDays(days)}
-              className={`px-3 py-1.5 text-sm rounded border transition ${
-                periodDays === days
-                  ? "bg-vka-navy text-white border-vka-navy"
-                  : "bg-white text-gray-700 border-gray-300 hover:border-vka-gold"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Динамика"
+        subtitle={`Изменение расхода по академии · ${formatDay(fromDate)} — ${formatDay(toDate)}`}
+        action={
+          <div className="glass-card p-1 flex rounded-xl">
+            {PERIODS.map(({ days, label }) => (
+              <button
+                key={days}
+                type="button"
+                onClick={() => setPeriodDays(days)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                  periodDays === days
+                    ? "bg-vka-navy text-white shadow-md"
+                    : "text-gray-600 hover:text-vka-navy"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
-      {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700 mb-4">
+          {error}
+        </div>
+      )}
 
       {loading ? (
-        <p className="text-gray-500">Загрузка...</p>
+        <p className="text-gray-500 animate-pulse">Загрузка...</p>
       ) : !data || chartDays.length === 0 ? (
         <p className="text-gray-500">Нет данных за период</p>
       ) : (
-        <div className="space-y-8">
-          <section className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-            <h3 className="text-sm font-semibold text-vka-navy mb-4">
-              Отсутствующие по категориям
-            </h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartDays} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    labelFormatter={(_, payload) =>
-                      payload?.[0]?.payload?.date
-                        ? formatDay(String(payload[0].payload.date))
-                        : ""
-                    }
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="sick"
-                    name="Больные"
-                    stroke="#be123c"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="trip"
-                    name="Командировка"
-                    stroke="#0369a1"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="leave"
-                    name="Отпуск"
-                    stroke="#b45309"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="dismissal"
-                    name="Увольнение"
-                    stroke="#6d28d9"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader title="Больные" />
+            <TrendLineChart
+              data={chartDays}
+              dataKey="sick"
+              name="Больные"
+              color={ABSENCE_CATEGORY_HEX.sick}
+            />
+          </Card>
 
-          <section className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-            <h3 className="text-sm font-semibold text-vka-navy mb-4">Численность и «в строю»</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartDays} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="total_list"
-                    name="По списку"
-                    stroke="#1e3a5f"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="present"
-                    name="В строю"
-                    stroke="#059669"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-
-          {facultyBars.length > 0 && (
-            <section className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-              <h3 className="text-sm font-semibold text-vka-navy mb-4">
-                Факультеты на {formatDay(toDate)}
-              </h3>
-              <div className="h-80">
+          <Card>
+            <CardHeader title={`Наряд по факультетам · ${formatDay(toDate)}`} />
+            {facultyDutyBars.length === 0 ? (
+              <p className="text-sm text-gray-500 py-8 text-center">Нет данных по факультетам</p>
+            ) : (
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={facultyBars}
+                    data={facultyDutyBars}
                     margin={{ top: 8, right: 8, left: 0, bottom: 40 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -215,14 +206,86 @@ export function ChiefTrendsPage() {
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="sick" name="Больные" fill="#be123c" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="trip" name="Команд." fill="#0369a1" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="leave" name="Отпуск" fill="#b45309" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="dismissal" name="Увольн." fill="#6d28d9" radius={[2, 2, 0, 0]} />
+                    <Bar
+                      dataKey="duty"
+                      name="Наряд"
+                      fill={ABSENCE_CATEGORY_HEX.duty}
+                      radius={[2, 2, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </section>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader title="Увольнения" />
+            <TrendLineChart
+              data={chartDays}
+              dataKey="dismissal"
+              name="Увольнение"
+              color={ABSENCE_CATEGORY_HEX.dismissal}
+            />
+          </Card>
+
+          <Card>
+            <CardHeader title="Командировки" />
+            <TrendLineChart
+              data={chartDays}
+              dataKey="trip"
+              name="Командировка"
+              color={ABSENCE_CATEGORY_HEX.trip}
+            />
+          </Card>
+
+          {facultySummaryBars.length > 0 && (
+            <Card className="lg:col-span-2">
+              <CardHeader title={`Факультеты на ${formatDay(toDate)}`} />
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={facultySummaryBars}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      angle={-25}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar
+                      dataKey="sick"
+                      name="Больные"
+                      fill={ABSENCE_CATEGORY_HEX.sick}
+                      radius={[2, 2, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="trip"
+                      name="Команд."
+                      fill={ABSENCE_CATEGORY_HEX.trip}
+                      radius={[2, 2, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="leave"
+                      name="Отпуск"
+                      fill={ABSENCE_CATEGORY_HEX.leave}
+                      radius={[2, 2, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="dismissal"
+                      name="Увольн."
+                      fill={ABSENCE_CATEGORY_HEX.dismissal}
+                      radius={[2, 2, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
           )}
         </div>
       )}

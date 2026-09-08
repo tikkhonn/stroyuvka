@@ -72,10 +72,14 @@ async def start_editing_course(
     course_id: int,
     report_date: date = Query(default_factory=date.today),
     session: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_duty_post(DutyPostType.DPK)),
+    user: AuthUser = Depends(require_duty_post(DutyPostType.DPK, DutyPostType.DPF)),
 ):
-    if user.unit_id != course_id:
+    if user.post_type == DutyPostType.DPK.value and user.unit_id != course_id:
         raise HTTPException(403, "Можно редактировать только свой курс")
+    if user.post_type == DutyPostType.DPF.value:
+        faculty = await get_faculty_for_unit(session, course_id)
+        if not faculty or faculty.id != user.unit_id:
+            raise HTTPException(403, "Можно редактировать только курсы своего факультета")
     try:
         report = await start_course_editing(session, course_id, report_date)
     except ValueError as e:

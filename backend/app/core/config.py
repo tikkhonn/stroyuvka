@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
     seed_demo_data: bool = True
+    chat_upload_dir: str = "data/chat_uploads"
 
     @property
     def cors_origin_list(self) -> list[str]:

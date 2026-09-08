@@ -433,8 +433,3 @@ async def reset_osh_structure(
 
     await sync_units_id_sequence(session)
     return {"deleted_courses": deleted_courses, "locations": list(LOCATION_NAMES.keys())}
-
-
-async def rebuild_default_osh(session: AsyncSession) -> None:
-    """Сброс ОШС: расположения 1001–1003, факультеты 1–9, без курсов."""
-    await reset_osh_structure(session, create_faculties=True)

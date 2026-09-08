@@ -14,14 +14,7 @@ import { AdminUnitsPage, AuditPage } from "../pages/AdminPages";
 import { AdminDutyContactsPage } from "../pages/AdminDutyContactsPage";
 import { ChiefOverviewPage } from "../pages/ChiefOverviewPage";
 import { ChiefTrendsPage } from "../pages/ChiefTrendsPage";
-
-function homePath(role: string, shell: string): string {
-  if (shell === "admin") return "/admin/units";
-  if (shell === "chief") return "/overview";
-  if (role === "dpa") return "/chessboard";
-  if (role === "dpf") return "/stroevka";
-  return "/attendance";
-}
+import { homePath } from "../lib/homePath";
 
 function HomeRedirect() {
   const { session } = useAuth();
@@ -80,7 +73,8 @@ function RequireRole({
 
 export function AppRouter() {
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/*"
@@ -192,5 +186,6 @@ export function AppRouter() {
         }
       />
     </Routes>
+    </>
   );
 }

@@ -48,6 +48,7 @@ async def post_chat_message(
             "body": msg.body,
             "created_at": str(msg.created_at),
             "faculty_id": faculty_id,
+            "attachments": [],
         },
     )
     return msg

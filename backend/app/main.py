@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
@@ -35,17 +35,20 @@ async def lifespan(app: FastAPI):
     from app.services.duty_auth import ensure_duty_post_schema
     from app.services.duty_contacts import ensure_duty_contact_schema
 
+    from app.services.chat_attachments import ensure_chat_attachment_schema
+
     async with async_session_factory() as session:
         await ensure_schema_patches(session)
         await ensure_duty_post_schema(session)
         await ensure_duty_contact_schema(session)
+        await ensure_chat_attachment_schema(session)
         await session.commit()
     yield
 
 
 app = FastAPI(
-    title="АСМРЛСП",
-    description="Автоматизированная система мониторинга расхода личного состава",
+    title="ПУЛЬС",
+    description="Система учёта расхода личного состава ВКА",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -71,7 +74,7 @@ app.include_router(users.router, prefix="/api")
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "asmrlsp"}
+    return {"status": "ok", "service": "puls"}
 
 
 def _rooms_for_token(payload: dict) -> list[str]:

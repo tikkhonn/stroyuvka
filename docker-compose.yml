@@ -30,6 +30,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - chat_uploads:/app/data/chat_uploads
 
   frontend:
     build: ./frontend
@@ -58,3 +59,4 @@ services:
 
 volumes:
   pgdata:
+  chat_uploads:

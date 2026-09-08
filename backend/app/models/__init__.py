@@ -52,6 +52,9 @@ class Person(Base):
     day_statuses: Mapped[list["PersonDayStatus"]] = relationship(
         "PersonDayStatus", back_populates="person"
     )
+    absences: Mapped[list["AbsenceEntry"]] = relationship(
+        "AbsenceEntry", back_populates="person"
+    )
 
     @property
     def full_name(self) -> str:
@@ -149,12 +152,15 @@ class UnitStrength(Base):
 
 
 class AbsenceEntry(Base):
-    """Строка отсутствующего: категория + фамилия (без справочника людей)."""
+    """Строка отсутствующего: категория + снимок звания/фамилии, опционально человек из списка."""
 
     __tablename__ = "absence_entries"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), index=True)
+    person_id: Mapped[int | None] = mapped_column(
+        ForeignKey("people.id"), nullable=True, index=True
+    )
     status_date: Mapped[date] = mapped_column(Date, index=True)
     category_code: Mapped[AbsenceCategoryCode] = mapped_column(String(32))
     rank: Mapped[str] = mapped_column(String(64), default="")
@@ -162,6 +168,10 @@ class AbsenceEntry(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    person: Mapped[Optional["Person"]] = relationship(
+        "Person", back_populates="absences"
     )
 
 
@@ -225,6 +235,44 @@ class ChatMessage(Base):
     recipient_id: Mapped[int] = mapped_column()
     faculty_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
     body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    attachments: Mapped[list["ChatAttachment"]] = relationship(
+        "ChatAttachment", back_populates="message", cascade="all, delete-orphan"
+    )
+
+
+class ChatAttachment(Base):
+    __tablename__ = "chat_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True
+    )
+    original_filename: Mapped[str] = mapped_column(String(512))
+    stored_path: Mapped[str] = mapped_column(String(1024))
+    content_type: Mapped[str] = mapped_column(String(128))
+    size_bytes: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    message: Mapped["ChatMessage"] = relationship("ChatMessage", back_populates="attachments")
+
+
+class ChatPendingUpload(Base):
+    __tablename__ = "chat_pending_uploads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uploader_kind: Mapped[str] = mapped_column(String(32))
+    uploader_id: Mapped[int] = mapped_column(index=True)
+    faculty_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
+    original_filename: Mapped[str] = mapped_column(String(512))
+    stored_path: Mapped[str] = mapped_column(String(1024))
+    content_type: Mapped[str] = mapped_column(String(128))
+    size_bytes: Mapped[int] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

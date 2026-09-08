@@ -16,7 +16,6 @@ from app.services.faculty_admin import (
     delete_faculty,
     delete_all_courses,
     move_course,
-    rebuild_default_osh,
     reset_osh_structure,
 )
 from app.services.org import build_faculty_tree, build_location_tree, build_unit_tree

@@ -1,10 +1,12 @@
 from datetime import date
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.core.enums import AuthKind, DutyPostType
 from app.db.session import get_db
 from app.dependencies import get_current_user
 from app.models import ChatMessage, DutyContact, Unit
@@ -12,6 +14,7 @@ from app.schemas import (
     AuthUser,
     ChatMessageCreate,
     ChatMessageRead,
+    ChatPendingUploadRead,
     DutyContactRead,
     DutyContactStatus,
     DutyContactUpsert,
@@ -19,6 +22,16 @@ from app.schemas import (
 )
 from app.services.audit import log_action
 from app.services.chat_access import assert_can_read_chat, assert_can_send_chat, ws_rooms_for_duty_user
+from app.services.chat_attachments import (
+    _absolute_path,
+    attach_pending_to_message,
+    ensure_chat_attachment_schema,
+    get_attachment_with_access,
+    is_image_content_type,
+    message_to_read,
+    save_pending_upload,
+    ws_message_payload,
+)
 from app.services.chat_clear import clear_chats_on_shift_change
 from app.services.duty_contacts import (
     ensure_duty_contact_schema,
@@ -39,15 +52,38 @@ async def list_messages(
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
+    await ensure_chat_attachment_schema(session)
     scope = assert_can_read_chat(user, faculty_id)
-    query = select(ChatMessage).order_by(ChatMessage.created_at.desc()).limit(limit)
+    query = (
+        select(ChatMessage)
+        .options(selectinload(ChatMessage.attachments))
+        .order_by(ChatMessage.created_at.desc())
+        .limit(limit)
+    )
     if scope is None:
-        # Канал ДПА — только сообщения без привязки к факультету
         query = query.where(ChatMessage.faculty_id.is_(None))
     else:
         query = query.where(ChatMessage.faculty_id == scope)
     result = await session.execute(query)
-    return list(reversed(list(result.scalars().all())))
+    messages = list(reversed(list(result.scalars().all())))
+    return [message_to_read(m) for m in messages]
+
+
+@router.post("/chat/uploads", response_model=ChatPendingUploadRead)
+async def upload_chat_file(
+    faculty_id: int | None = Query(None),
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    _, save_faculty_id = assert_can_send_chat(user, faculty_id)
+    row = await save_pending_upload(session, user, save_faculty_id, file)
+    return ChatPendingUploadRead(
+        id=row.id,
+        filename=row.original_filename,
+        content_type=row.content_type,
+        size_bytes=row.size_bytes,
+    )
 
 
 @router.post("/chat/messages", response_model=ChatMessageRead)
@@ -66,25 +102,49 @@ async def send_message(
         recipient_kind=body.recipient_kind,
         recipient_id=body.recipient_id,
         faculty_id=save_faculty_id,
-        body=body.body,
+        body=body.body.strip(),
     )
     session.add(msg)
     await session.flush()
 
+    attachments = await attach_pending_to_message(
+        session, user, save_faculty_id, msg.id, body.upload_ids
+    )
+
     await ws_manager.broadcast_event(
         rooms,
         "CHAT_MESSAGE",
-        {
-            "id": msg.id,
-            "sender_kind": msg.sender_kind,
-            "sender_id": msg.sender_id,
-            "sender_name": msg.sender_name,
-            "body": msg.body,
-            "created_at": str(msg.created_at),
-            "faculty_id": save_faculty_id,
+        ws_message_payload(msg, save_faculty_id, attachments),
+    )
+    return message_to_read(msg, attachments)
+
+
+@router.get("/chat/attachments/{attachment_id}")
+async def download_attachment(
+    attachment_id: int,
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    await ensure_chat_attachment_schema(session)
+    att, msg = await get_attachment_with_access(session, attachment_id)
+    assert_can_read_chat(user, msg.faculty_id)
+
+    path = _absolute_path(att.stored_path)
+    if not path.is_file():
+        raise HTTPException(404, "Файл не найден на сервере")
+
+    disposition = "inline" if is_image_content_type(att.content_type) else "attachment"
+    encoded_name = quote(att.original_filename)
+    return FileResponse(
+        path,
+        media_type=att.content_type,
+        headers={
+            "Content-Disposition": (
+                f'{disposition}; filename="{att.original_filename}"; '
+                f"filename*=UTF-8''{encoded_name}"
+            )
         },
     )
-    return msg
 
 
 @router.get("/duty-contacts/self/status", response_model=DutyContactStatus)

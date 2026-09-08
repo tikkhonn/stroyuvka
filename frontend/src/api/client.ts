@@ -71,6 +71,75 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.text() as unknown as T;
 }
 
+export async function uploadApi<T>(path: string, file: File): Promise<T> {
+  const token = localStorage.getItem("token");
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  });
+  if (res.status === 401) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("session");
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = err.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ")
+          : res.statusText;
+    throw new Error(message || "Ошибка загрузки");
+  }
+  return res.json();
+}
+
+export async function uploadChatFile(
+  file: File,
+  facultyId: number | null | undefined
+): Promise<ChatPendingUpload> {
+  const qs = facultyId != null ? `?faculty_id=${facultyId}` : "";
+  return uploadApi<ChatPendingUpload>(`/api/chat/uploads${qs}`, file);
+}
+
+export async function fetchChatAttachmentBlob(attachmentId: number): Promise<Blob> {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}/api/chat/attachments/${attachmentId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Ошибка загрузки файла");
+  }
+  return res.blob();
+}
+
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Ошибка скачивания");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const authApi = {
   login: (username: string, password: string) =>
     api<AuthSession>("/api/auth/login", {
@@ -102,11 +171,34 @@ export interface AttendanceAggregate {
 export interface AbsenceEntry {
   id: number;
   unit_id: number;
+  person_id?: number | null;
   status_date: string;
   category_code: string;
   rank: string;
   last_name: string;
   note: string | null;
+  editable: boolean;
+}
+
+export interface PersonRead {
+  id: number;
+  unit_id: number;
+  rank: string;
+  last_name: string;
+  first_name: string;
+  middle_name: string | null;
+  composition: string;
+  position: string | null;
+  is_active: boolean;
+  full_name: string;
+  display_name: string;
+}
+
+export interface PersonAttendanceRow {
+  person: PersonRead;
+  absence_id?: number | null;
+  category_code?: string | null;
+  note?: string | null;
   editable: boolean;
 }
 
@@ -117,11 +209,49 @@ export interface AttendanceSnapshot {
   aggregate: AttendanceAggregate;
   total_list: number;
   absences: AbsenceEntry[];
+  people?: PersonAttendanceRow[];
   report_status: ReportStatus | null;
   editable: boolean;
   changes_pending_dpf?: boolean;
   changes_pending_dpa?: boolean;
   is_editing?: boolean;
+}
+
+export interface AttendanceUnitOption {
+  id: number;
+  name: string;
+  type: string;
+  kind: string;
+}
+
+export interface RosterParseRow {
+  row_number: number;
+  rank: string;
+  full_name: string;
+  last_name: string;
+  first_name: string;
+  source: string;
+  action: string | null;
+  person_id: number | null;
+  warnings: string[];
+}
+
+export interface RosterImportPreview {
+  rows: RosterParseRow[];
+  errors: { row_number: number | null; message: string }[];
+  to_add: number;
+  to_update: number;
+  to_restore: number;
+  to_deactivate: number;
+  can_apply: boolean;
+}
+
+export interface RosterImportResult {
+  added: number;
+  updated: number;
+  restored: number;
+  deactivated: number;
+  total_list: number;
 }
 
 export interface AbsenceCategoryOption {
@@ -260,6 +390,7 @@ export interface FacultyTodayBreakdown {
   trip: number;
   leave: number;
   dismissal: number;
+  duty: number;
 }
 
 export interface TrendsResponse {
@@ -267,6 +398,20 @@ export interface TrendsResponse {
   to_date: string;
   days: TrendDayPoint[];
   faculties_today: FacultyTodayBreakdown[];
+}
+
+export interface ChatAttachment {
+  id: number;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+}
+
+export interface ChatPendingUpload {
+  id: number;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
 }
 
 export interface ChatMessage {
@@ -277,6 +422,7 @@ export interface ChatMessage {
   body: string;
   created_at: string;
   faculty_id?: number | null;
+  attachments?: ChatAttachment[];
 }
 
 export interface UnitRead {
