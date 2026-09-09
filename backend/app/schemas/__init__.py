@@ -533,6 +533,12 @@ class DutyPostClearRegistrationResult(BaseModel):
     message: str
 
 
+class LandlinePhone(BaseModel):
+    id: int = 0
+    name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(default="", max_length=64)
+
+
 # --- Audit ---
 
 

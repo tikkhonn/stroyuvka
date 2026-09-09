@@ -10,6 +10,7 @@ const NAV_DPA = [
   { to: "/chat", label: "Чат ДПФ" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
+  { to: "/documentation", label: "Документация" },
   { to: "/shift-change", label: "Смена наряда" },
   { to: "/help", label: "Инструкция" },
 ];
@@ -20,6 +21,7 @@ const NAV_DPF = [
   { to: "/chat", label: "Чат" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
+  { to: "/documentation", label: "Документация" },
   { to: "/shift-change", label: "Смена наряда" },
   { to: "/help", label: "Инструкция" },
 ];
@@ -29,6 +31,7 @@ const NAV_DPK = [
   { to: "/chat", label: "Чат факультета" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
+  { to: "/documentation", label: "Документация" },
   { to: "/shift-change", label: "Смена наряда" },
   { to: "/help", label: "Инструкция" },
 ];

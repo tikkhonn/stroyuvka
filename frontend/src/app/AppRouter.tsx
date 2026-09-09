@@ -6,6 +6,7 @@ import { AttendancePage } from "../pages/AttendancePage";
 import { ChessboardPage } from "../pages/ChessboardPage";
 import { ChatPage } from "../pages/ChatPage";
 import { PrintPage } from "../pages/PrintPage";
+import { DocumentationPage } from "../pages/DocumentationPage";
 import { PhonesPage } from "../pages/PhonesPage";
 import { HelpPage } from "../pages/HelpPage";
 import { StroevkaReviewPage } from "../pages/StroevkaReviewPage";
@@ -128,6 +129,14 @@ export function AppRouter() {
                   element={
                     <RequireRole roles={["dpa", "dpf", "dpk"]}>
                       <PrintPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/documentation"
+                  element={
+                    <RequireRole roles={["dpa", "dpf", "dpk"]}>
+                      <DocumentationPage />
                     </RequireRole>
                   }
                 />

@@ -24,6 +24,12 @@ export interface DutyContact {
   note: string | null;
 }
 
+export interface LandlinePhone {
+  id: number;
+  name: string;
+  phone: string;
+}
+
 export interface DutyPost {
   id: number;
   unit_id: number;

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { DutyContact, api } from "../api/client";
+import { DutyContact, LandlinePhone, api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { onWsEvent } from "../api/ws";
+
+type PhonesTab = "landline" | "mobile";
 
 const GROUP_LABELS: Record<string, string> = {
   dpa: "ДПА",
@@ -34,8 +36,114 @@ function ContactCard({ contact }: { contact: DutyContact }) {
   );
 }
 
+function MobileContactsList({
+  loading,
+  contacts,
+  groups,
+  emptyMessage,
+  showGrouped,
+}: {
+  loading: boolean;
+  contacts: DutyContact[];
+  groups: { type: string; label: string; items: DutyContact[] }[];
+  emptyMessage: string;
+  showGrouped: boolean;
+}) {
+  if (loading) {
+    return <p>Загрузка...</p>;
+  }
+
+  if (contacts.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">{emptyMessage}</div>
+    );
+  }
+
+  if (showGrouped) {
+    return (
+      <div className="space-y-6">
+        {groups.map(({ type, label, items }) => (
+          <section key={type}>
+            <h3 className="text-sm font-semibold text-vka-navy uppercase tracking-wide mb-3">
+              {label}
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {items.map((c) => (
+                <ContactCard key={c.id} contact={c} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {contacts.map((c) => (
+        <ContactCard key={c.id} contact={c} />
+      ))}
+    </div>
+  );
+}
+
+function LandlineTable() {
+  const [rows, setRows] = useState<LandlinePhone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setError("");
+    void api<LandlinePhone[]>("/api/landline-phones")
+      .then(setRows)
+      .catch((err) => {
+        setRows([]);
+        setError(err instanceof Error ? err.message : "Ошибка загрузки");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <p>Загрузка...</p>;
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-600">{error}</p>;
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Список стационарных номеров пуст.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-gray-50 text-left text-xs text-gray-600 uppercase tracking-wide">
+            <th className="py-2 px-3 font-medium">Должность</th>
+            <th className="py-2 px-3 font-medium w-48">Номер</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="border-t border-gray-100">
+              <td className="py-2 px-3">{row.name}</td>
+              <td className="py-2 px-3 whitespace-nowrap">{row.phone || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PhonesPage() {
   const { session } = useAuth();
+  const [tab, setTab] = useState<PhonesTab>("landline");
   const [contacts, setContacts] = useState<DutyContact[]>([]);
   const [loading, setLoading] = useState(true);
   const role = session?.role || "";
@@ -74,42 +182,47 @@ export function PhonesPage() {
     shell === "chief"
       ? "Пока никто из дежурных не зарегистрировался на сегодня."
       : role === "dpk"
-      ? "Пока не зарегистрировались ДПФ или другие ДПК вашего факультета."
-      : role === "dpf"
-        ? "Пока никто из дежурных (ДПА, ДПФ, ДПК) не зарегистрировался."
-        : "Пока ни один ДПФ не зарегистрировался.";
+        ? "Пока не зарегистрировались ДПФ или другие ДПК вашего факультета."
+        : role === "dpf"
+          ? "Пока никто из дежурных (ДПА, ДПФ, ДПК) не зарегистрировался."
+          : "Пока ни один ДПФ не зарегистрировался.";
 
   const showGrouped = role === "dpf" || role === "dpk" || shell === "chief";
 
   return (
     <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">Телефоны</h2>
+      <h2 className="text-xl font-serif font-bold text-vka-navy mb-2">Телефоны</h2>
+      <div className="flex gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => setTab("landline")}
+          className={`text-sm px-3 py-1.5 rounded border ${
+            tab === "landline" ? "bg-vka-navy text-white" : "bg-white"
+          }`}
+        >
+          Стационарные
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("mobile")}
+          className={`text-sm px-3 py-1.5 rounded border ${
+            tab === "mobile" ? "bg-vka-navy text-white" : "bg-white"
+          }`}
+        >
+          Мобильные
+        </button>
+      </div>
 
-      {loading ? (
-        <p>Загрузка...</p>
-      ) : contacts.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">{emptyMessage}</div>
-      ) : showGrouped ? (
-        <div className="space-y-6">
-          {groups.map(({ type, label, items }) => (
-            <section key={type}>
-              <h3 className="text-sm font-semibold text-vka-navy uppercase tracking-wide mb-3">
-                {label}
-              </h3>
-              <div className="grid gap-3 md:grid-cols-2">
-                {items.map((c) => (
-                  <ContactCard key={c.id} contact={c} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+      {tab === "landline" ? (
+        <LandlineTable />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {contacts.map((c) => (
-            <ContactCard key={c.id} contact={c} />
-          ))}
-        </div>
+        <MobileContactsList
+          loading={loading}
+          contacts={contacts}
+          groups={groups}
+          emptyMessage={emptyMessage}
+          showGrouped={showGrouped}
+        />
       )}
     </div>
   );
