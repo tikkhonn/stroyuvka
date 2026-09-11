@@ -40,6 +40,7 @@ from app.services.duty_contacts import (
     register_self_contact,
     shift_change_self_contact,
 )
+from app.services.people import format_rank
 from app.ws.manager import ws_manager
 
 router = APIRouter(tags=["chat", "duty"])
@@ -167,7 +168,7 @@ async def self_contact_status(
             unit_name=unit.name if unit else None,
             duty_post_id=contact.duty_post_id,
             post_type=user.post_type,
-            rank=contact.rank,
+            rank=format_rank(contact.rank),
             full_name=contact.full_name,
             post_name=contact.post_name,
             phone=contact.phone,
@@ -197,7 +198,7 @@ async def register_self_contact_route(
         unit_name=unit.name if unit else None,
         duty_post_id=contact.duty_post_id,
         post_type=user.post_type,
-        rank=contact.rank,
+        rank=format_rank(contact.rank),
         full_name=contact.full_name,
         post_name=contact.post_name,
         phone=contact.phone,
@@ -291,7 +292,7 @@ async def upsert_contact(
         unit_name=unit.name if unit else None,
         duty_post_id=contact.duty_post_id,
         post_type=user.post_type,
-        rank=contact.rank,
+        rank=format_rank(contact.rank),
         full_name=contact.full_name,
         post_name=contact.post_name,
         phone=contact.phone,

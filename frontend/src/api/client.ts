@@ -195,6 +195,7 @@ export interface PersonRead {
   middle_name: string | null;
   composition: string;
   position: string | null;
+  department_code: string | null;
   is_active: boolean;
   full_name: string;
   display_name: string;
@@ -208,6 +209,13 @@ export interface PersonAttendanceRow {
   editable: boolean;
 }
 
+export interface DepartmentStroevkaSummary {
+  code: string | null;
+  name: string;
+  aggregate: AttendanceAggregate;
+  absences: AbsenceEntry[];
+}
+
 export interface AttendanceSnapshot {
   unit_id: number;
   unit_name: string;
@@ -216,6 +224,7 @@ export interface AttendanceSnapshot {
   total_list: number;
   absences: AbsenceEntry[];
   people?: PersonAttendanceRow[];
+  departments?: DepartmentStroevkaSummary[];
   report_status: ReportStatus | null;
   editable: boolean;
   changes_pending_dpf?: boolean;
@@ -236,6 +245,7 @@ export interface RosterParseRow {
   full_name: string;
   last_name: string;
   first_name: string;
+  department_code: string | null;
   source: string;
   action: string | null;
   person_id: number | null;

@@ -44,6 +44,7 @@ from app.services.people import (
     create_person,
     deactivate_person,
     display_last_name,
+    format_rank,
     list_people,
     person_to_read,
     update_person,
@@ -230,7 +231,7 @@ def _entry_read(entry, editable: bool = True) -> AbsenceEntryRead:
         person_id=entry.person_id,
         status_date=entry.status_date,
         category_code=entry.category_code,
-        rank=entry.rank or "",
+        rank=format_rank(entry.rank or ""),
         last_name=entry.last_name,
         note=entry.note,
         editable=editable,
@@ -399,7 +400,9 @@ async def add_person(
     await ensure_schema_patches(session)
     unit = await _require_writable_unit(session, user, unit_id, report_date)
     try:
-        person = await create_person(session, unit, body.rank, body.full_name)
+        person = await create_person(
+            session, unit, body.rank, body.full_name, department_code=body.department_code
+        )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     await _notify_attendance(session, unit_id, report_date)
@@ -436,6 +439,8 @@ async def patch_person(
             person,
             rank=body.rank,
             full_name=body.full_name,
+            department_code=body.department_code,
+            department_code_set="department_code" in body.model_fields_set,
             is_active=body.is_active,
         )
     except ValueError as e:

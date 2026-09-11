@@ -112,11 +112,13 @@ class CourseBulkResult(BaseModel):
 class PersonRosterWrite(BaseModel):
     rank: str = Field(min_length=1, max_length=64)
     full_name: str = Field(min_length=1, max_length=256, description="Фамилия и инициалы, напр. Иванов И.И.")
+    department_code: str | None = None
 
 
 class PersonRosterPatch(BaseModel):
     rank: str | None = None
     full_name: str | None = None
+    department_code: str | None = None
     is_active: bool | None = None
 
 
@@ -129,6 +131,7 @@ class PersonRead(ORMModel):
     middle_name: str | None
     composition: Composition
     position: str | None
+    department_code: str | None = None
     is_active: bool
     full_name: str = ""
     display_name: str = ""
@@ -225,6 +228,13 @@ class PersonAttendanceRow(BaseModel):
     editable: bool = True
 
 
+class DepartmentStroevkaSummary(BaseModel):
+    code: str | None = None
+    name: str
+    aggregate: AttendanceAggregate
+    absences: list[AbsenceEntryRead] = []
+
+
 class AttendanceSnapshot(BaseModel):
     unit_id: int
     unit_name: str
@@ -233,6 +243,7 @@ class AttendanceSnapshot(BaseModel):
     total_list: int = 0
     absences: list[AbsenceEntryRead] = []
     people: list[PersonAttendanceRow] = []
+    departments: list[DepartmentStroevkaSummary] = []
     report_status: ReportStatus | None = None
     editable: bool = True
     changes_pending_dpf: bool = False
@@ -275,6 +286,7 @@ class RosterParseRow(BaseModel):
     full_name: str
     last_name: str = ""
     first_name: str = ""
+    department_code: str | None = None
     source: str = ""
     action: str | None = None
     person_id: int | None = None

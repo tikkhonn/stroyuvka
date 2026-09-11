@@ -26,6 +26,7 @@ from app.services.org import (
     get_faculty_for_unit,
 )
 from app.services.unit_ids import LOCATION_NAMES
+from app.services.people import format_rank
 
 
 async def _get_or_create_officer_report(
@@ -166,7 +167,7 @@ async def faculty_submit_blockers(
         )
         cr = result.scalar_one_or_none()
         if not cr or cr.status not in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
-            blockers.append(f"Курс «{course.name}» (id {course.id}) не отправил строевку.")
+            blockers.append(f"{course.name} не отправил строевую записку")
     return blockers
 
 
@@ -199,7 +200,7 @@ async def submit_faculty_report(
         )
         cr = result.scalar_one_or_none()
         if not cr or cr.status not in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
-            raise ValueError(f"Курс «{course.name}» не отправил строевку")
+            raise ValueError(f"{course.name} не отправил строевую записку")
 
     officer_agg = await compute_aggregate_for_unit(
         session,
@@ -594,7 +595,7 @@ async def build_chessboard_sick_summary(
                     faculty_name=fac.name if fac else None,
                     location_id=loc_id,
                     location_name=loc_name,
-                    rank=entry.rank or "",
+                    rank=format_rank(entry.rank or ""),
                     last_name=entry.last_name,
                     note=entry.note,
                     status_date=entry.status_date,
@@ -616,7 +617,7 @@ async def build_chessboard_sick_summary(
                     faculty_name=faculty.name,
                     location_id=None,
                     location_name="Офицеры",
-                    rank=entry.rank or "",
+                    rank=format_rank(entry.rank or ""),
                     last_name=entry.last_name,
                     note=entry.note,
                     status_date=entry.status_date,

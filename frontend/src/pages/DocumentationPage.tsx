@@ -1,6 +1,5 @@
-const USTAVY_PDF = "/docs/ustavy.pdf";
+const USTAVY_PDF = "/api/documentation/doc.pdf";
 const USTAVY_COVER = "/docs/ustavy-cover.jpg";
-/* const USTAVY_TITLE = "Общевоинские уставы ВС РФ"; */
 
 export function DocumentationPage() {
   return (
@@ -16,11 +15,10 @@ export function DocumentationPage() {
           <div className="overflow-hidden rounded-md border border-gray-100">
             <img
               src={USTAVY_COVER}
-              /* alt={USTAVY_TITLE} */
+              alt=""
               className="aspect-[2/3] w-full object-cover transition-transform group-hover:scale-[1.02]"
             />
           </div>
-          {/* <p className="mt-3 text-sm font-medium leading-snug text-vka-navy">{USTAVY_TITLE}</p> */}
         </a>
       </div>
     </div>

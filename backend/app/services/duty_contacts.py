@@ -7,6 +7,7 @@ from app.core.enums import AuthKind, DutyPostType
 from app.models import DutyContact, DutyPost, Unit
 from app.schemas import AuthUser, DutyContactRead, DutySelfRegister
 from app.services.org import get_courses_for_faculty
+from app.services.people import format_rank
 
 
 async def ensure_duty_contact_schema(session: AsyncSession) -> None:
@@ -60,7 +61,7 @@ async def register_self_contact(
     if user.unit_id is None:
         raise ValueError("Нет привязки к подразделению")
 
-    rank = body.rank.strip()
+    rank = format_rank(body.rank.strip())
     full_name = body.full_name.strip()
     phone = body.phone.strip()
     if not rank or not full_name or not phone:
@@ -233,7 +234,7 @@ async def list_contacts_for_user(
                 unit_name=unit_name,
                 duty_post_id=contact.duty_post_id,
                 post_type=pt or None,
-                rank=contact.rank,
+                rank=format_rank(contact.rank),
                 full_name=contact.full_name,
                 post_name=contact.post_name,
                 phone=contact.phone,

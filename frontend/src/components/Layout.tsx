@@ -10,19 +10,19 @@ const NAV_DPA = [
   { to: "/chat", label: "Чат ДПФ" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
-  { to: "/documentation", label: "Документация" },
   { to: "/shift-change", label: "Смена наряда" },
+  { to: "/documentation", label: "Документация" },
   { to: "/help", label: "Инструкция" },
 ];
 
 const NAV_DPF = [
-  { to: "/stroevka", label: "Строевки курсов" },
+  { to: "/stroevka", label: "Строевые записки" },
   { to: "/attendance", label: "Расход" },
   { to: "/chat", label: "Чат" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
-  { to: "/documentation", label: "Документация" },
   { to: "/shift-change", label: "Смена наряда" },
+  { to: "/documentation", label: "Документация" },
   { to: "/help", label: "Инструкция" },
 ];
 
@@ -31,8 +31,8 @@ const NAV_DPK = [
   { to: "/chat", label: "Чат факультета" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
-  { to: "/documentation", label: "Документация" },
   { to: "/shift-change", label: "Смена наряда" },
+  { to: "/documentation", label: "Документация" },
   { to: "/help", label: "Инструкция" },
 ];
 
@@ -42,6 +42,7 @@ const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
     { to: "/attendance", label: "Расход" },
     { to: "/admin/duty-contacts", label: "Дежурные" },
     { to: "/audit", label: "Журнал" },
+    { to: "/documentation", label: "Документация" },
     { to: "/help", label: "Инструкция" },
   ],
   chief: [
@@ -51,7 +52,7 @@ const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
   ],
 };
 
-const SECONDARY_NAV_PATHS = new Set(["/shift-change", "/help"]);
+const SECONDARY_NAV_PATHS = new Set(["/shift-change", "/documentation", "/help"]);
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Администратор",
@@ -152,14 +153,9 @@ export function Header() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <Logo className="h-10 w-auto shrink-0" />
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-vka-gold/90 mb-0.5 truncate">
-                Пульс · ВКА
-              </p>
-              <h1 className="font-serif text-lg md:text-xl font-bold leading-tight truncate">
-                ПУЛЬС
-              </h1>
-            </div>
+            <h1 className="font-serif text-lg md:text-xl font-bold leading-tight truncate">
+              ПУЛЬС.ВКА
+            </h1>
           </div>
           <HeaderActions />
         </div>

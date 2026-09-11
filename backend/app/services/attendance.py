@@ -16,11 +16,14 @@ from app.schemas import (
     AbsenceEntryRead,
     AttendanceAggregate,
     AttendanceSnapshot,
+    DepartmentStroevkaSummary,
     PersonAttendanceRow,
 )
 from app.services.people import (
     count_active_people,
+    department_display_name,
     display_last_name,
+    format_rank,
     list_people,
     person_to_read,
 )
@@ -156,6 +159,12 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
             "ADD COLUMN IF NOT EXISTS person_id INTEGER REFERENCES people(id)"
         )
     )
+    await session.execute(
+        text(
+            "ALTER TABLE people "
+            "ADD COLUMN IF NOT EXISTS department_code VARCHAR(32)"
+        )
+    )
     await session.flush()
 
 
@@ -256,7 +265,7 @@ async def add_absence_entry(
         return created, notify
 
     last_name = body.last_name.strip()
-    rank = body.rank.strip()
+    rank = format_rank(body.rank)
     if not last_name:
         raise ValueError("Укажите фамилию")
     if not rank:
@@ -321,7 +330,7 @@ async def _add_absences_for_people(
             person_id=person.id,
             status_date=report_date,
             category_code=code,
-            rank=person.rank,
+            rank=format_rank(person.rank),
             last_name=display_last_name(person),
             note=note,
         )
@@ -400,6 +409,70 @@ async def compute_academy_aggregate(
     return sum_aggregates(parts)
 
 
+def _department_sort_key(code: str | None) -> tuple[int, int, str]:
+    if code is None:
+        return (1, 0, "")
+    try:
+        return (0, int(code), code)
+    except ValueError:
+        return (0, 999_999, code)
+
+
+def _entries_to_reads(entries: list[AbsenceEntry], editable: bool) -> list[AbsenceEntryRead]:
+    return [
+        AbsenceEntryRead(
+            id=e.id,
+            unit_id=e.unit_id,
+            person_id=e.person_id,
+            status_date=e.status_date,
+            category_code=_normalize_code(e.category_code),
+            rank=format_rank(e.rank or ""),
+            last_name=e.last_name,
+            note=e.note,
+            editable=editable,
+        )
+        for e in entries
+    ]
+
+
+async def compute_department_breakdown(
+    session: AsyncSession,
+    unit_id: int,
+    entries: list[AbsenceEntry],
+    editable: bool,
+) -> list[DepartmentStroevkaSummary]:
+    people = await list_people(session, unit_id, include_inactive=False)
+    person_dept = {p.id: p.department_code for p in people}
+
+    dept_counts: dict[str | None, int] = {}
+    for person in people:
+        code = person.department_code
+        dept_counts[code] = dept_counts.get(code, 0) + 1
+
+    dept_entries: dict[str | None, list[AbsenceEntry]] = {}
+    for entry in entries:
+        if entry.person_id and entry.person_id in person_dept:
+            code = person_dept[entry.person_id]
+        else:
+            code = None
+        dept_entries.setdefault(code, []).append(entry)
+
+    all_codes = set(dept_counts) | set(dept_entries)
+    summaries: list[DepartmentStroevkaSummary] = []
+    for code in sorted(all_codes, key=_department_sort_key):
+        total = dept_counts.get(code, 0)
+        group_entries = dept_entries.get(code, [])
+        summaries.append(
+            DepartmentStroevkaSummary(
+                code=code,
+                name=department_display_name(code),
+                aggregate=aggregate_from_entries(total, group_entries),
+                absences=_entries_to_reads(group_entries, editable),
+            )
+        )
+    return summaries
+
+
 async def get_attendance_snapshot(
     session: AsyncSession,
     unit_id: int,
@@ -444,20 +517,13 @@ async def get_attendance_snapshot(
             )
         )
 
-    entry_reads = [
-        AbsenceEntryRead(
-            id=e.id,
-            unit_id=e.unit_id,
-            person_id=e.person_id,
-            status_date=e.status_date,
-            category_code=_normalize_code(e.category_code),
-            rank=e.rank or "",
-            last_name=e.last_name,
-            note=e.note,
-            editable=editable,
+    entry_reads = _entries_to_reads(entries, editable)
+
+    departments: list[DepartmentStroevkaSummary] = []
+    if unit.type == UnitType.FACULTY:
+        departments = await compute_department_breakdown(
+            session, unit_id, entries, editable
         )
-        for e in entries
-    ]
 
     return AttendanceSnapshot(
         unit_id=unit_id,
@@ -467,6 +533,7 @@ async def get_attendance_snapshot(
         total_list=total,
         absences=entry_reads,
         people=people_rows,
+        departments=departments,
         report_status=report_status,
         editable=editable,
         changes_pending_dpf=changes_pending_dpf,

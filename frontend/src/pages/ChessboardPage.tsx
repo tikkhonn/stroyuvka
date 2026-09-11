@@ -114,7 +114,7 @@ function SickListTable({ summary }: { summary: ChessboardSickSummary }) {
         <thead>
           <tr>
             <th>№</th>
-            <th>Фамилия</th>
+            <th>ФИО</th>
             <th>Подразделение</th>
             <th>Факультет</th>
             <th>Расположение</th>

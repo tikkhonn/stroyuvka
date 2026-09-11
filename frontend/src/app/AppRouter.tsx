@@ -135,7 +135,7 @@ export function AppRouter() {
                 <Route
                   path="/documentation"
                   element={
-                    <RequireRole roles={["dpa", "dpf", "dpk"]}>
+                    <RequireRole roles={["admin", "dpa", "dpf", "dpk"]}>
                       <DocumentationPage />
                     </RequireRole>
                   }

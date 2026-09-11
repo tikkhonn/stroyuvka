@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DutyContact, LandlinePhone, api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { onWsEvent } from "../api/ws";
+import { formatRank } from "../constants/ranks";
 
 type PhonesTab = "landline" | "mobile";
 
@@ -19,7 +20,7 @@ const GROUP_ORDER: Record<string, string[]> = {
 };
 
 function displayName(c: DutyContact) {
-  if (c.rank && c.full_name) return `${c.rank} ${c.full_name}`;
+  if (c.rank && c.full_name) return `${formatRank(c.rank)} ${c.full_name}`;
   return c.post_name;
 }
 

@@ -12,10 +12,11 @@ import { useAuth } from "../context/AuthContext";
 import { SummaryCards } from "../components/SummaryCards";
 import { StatusBadge } from "../components/StatusBadge";
 import { RosterSection } from "../components/RosterSection";
+import { RosterPersonCombobox } from "../components/RosterPersonCombobox";
 import { onWsEvent } from "../api/ws";
-import { RANK_SUGGESTIONS } from "../constants/ranks";
 import { ABSENCE_CATEGORY_OPTIONS, formatAbsenceReason, absenceCategoryRowClass } from "../constants/absenceCategories";
 import { todayLocal } from "../utils/date";
+import { formatRank } from "../constants/ranks";
 
 const FALLBACK = ABSENCE_CATEGORY_OPTIONS;
 
@@ -35,8 +36,7 @@ export function AttendancePage() {
   const [absencesOpen, setAbsencesOpen] = useState(true);
   const [absencesEditing, setAbsencesEditing] = useState(false);
   const [newCategory, setNewCategory] = useState("duty");
-  const [newRank, setNewRank] = useState("");
-  const [newLastName, setNewLastName] = useState("");
+  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [newDetail, setNewDetail] = useState("");
 
   useEffect(() => {
@@ -134,6 +134,15 @@ export function AttendancePage() {
     return map;
   }, [snapshot]);
 
+  const absentPersonIds = useMemo(
+    () => new Set(absenceByPersonId.keys()),
+    [absenceByPersonId]
+  );
+
+  useEffect(() => {
+    setSelectedPersonId(null);
+  }, [unitId]);
+
   useEffect(() => {
     if (!snapshot?.editable) {
       setAbsencesEditing(false);
@@ -142,7 +151,10 @@ export function AttendancePage() {
 
   const addAbsence = async (e: FormEvent) => {
     e.preventDefault();
-    if (!unitId || !newLastName.trim() || !newRank.trim()) return;
+    if (!unitId || selectedPersonId === null) {
+      setMessage("Выберите человека из списка подразделения");
+      return;
+    }
     if (detailRequired && !newDetail.trim()) {
       setMessage("Укажите уточнение (вид наряда / где болен)");
       return;
@@ -154,12 +166,11 @@ export function AttendancePage() {
         method: "POST",
         body: JSON.stringify({
           category_code: newCategory,
-          rank: newRank.trim(),
-          last_name: newLastName.trim(),
+          person_ids: [selectedPersonId],
           note: newDetail.trim() || null,
         }),
       });
-      setNewLastName("");
+      setSelectedPersonId(null);
       setNewDetail("");
       await load();
     } catch (err) {
@@ -342,27 +353,13 @@ export function AttendancePage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Звание</label>
-                      <input
-                        list="rank-suggestions"
-                        value={newRank}
-                        onChange={(e) => setNewRank(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                        required
-                      />
-                      <datalist id="rank-suggestions">
-                        {RANK_SUGGESTIONS.map((r) => (
-                          <option key={r} value={r} />
-                        ))}
-                      </datalist>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Фамилия</label>
-                      <input
-                        value={newLastName}
-                        onChange={(e) => setNewLastName(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                        required
+                      <label className="block text-xs text-gray-600 mb-1">ФИО</label>
+                      <RosterPersonCombobox
+                        people={people}
+                        absentPersonIds={absentPersonIds}
+                        value={selectedPersonId}
+                        onChange={setSelectedPersonId}
+                        disabled={saving}
                       />
                     </div>
                     <div>
@@ -378,8 +375,8 @@ export function AttendancePage() {
                     </div>
                     <button
                       type="submit"
-                      disabled={saving}
-                      className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium"
+                      disabled={saving || selectedPersonId === null}
+                      className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium disabled:opacity-50"
                     >
                       Добавить вручную
                     </button>
@@ -392,7 +389,7 @@ export function AttendancePage() {
                       <th>№</th>
                       <th>Звание</th>
                       <th>Причина отсутствия</th>
-                      <th>Фамилия</th>
+                      <th>ФИО</th>
                       {editable && absencesEditing && <th></th>}
                     </tr>
                   </thead>
@@ -413,7 +410,7 @@ export function AttendancePage() {
                           className={absenceCategoryRowClass(row.category_code)}
                         >
                           <td>{i + 1}</td>
-                          <td>{row.rank || "—"}</td>
+                          <td>{formatRank(row.rank) || "—"}</td>
                           <td>{reasonForAbsence(row)}</td>
                           <td>{row.last_name}</td>
                           {editable && absencesEditing && (

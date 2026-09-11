@@ -10,7 +10,7 @@ import {
   uploadApi,
 } from "../api/client";
 import { formatAbsenceReason, absenceCategoryRowClass } from "../constants/absenceCategories";
-import { RANK_SUGGESTIONS } from "../constants/ranks";
+import { RANK_SUGGESTIONS, formatRank } from "../constants/ranks";
 
 type ImportMode = "upsert" | "replace";
 
@@ -48,6 +48,7 @@ export function RosterSection({
   const [bulkNote, setBulkNote] = useState("");
   const [newRank, setNewRank] = useState("");
   const [newFullName, setNewFullName] = useState("");
+  const [newDepartment, setNewDepartment] = useState("");
   const [preview, setPreview] = useState<RosterImportPreview | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("upsert");
@@ -137,10 +138,12 @@ export function RosterSection({
         body: JSON.stringify({
           rank: newRank.trim(),
           full_name: newFullName.trim(),
+          department_code: newDepartment.trim() || null,
         }),
       });
       setNewRank("");
       setNewFullName("");
+      setNewDepartment("");
       await onReload();
     } catch (err) {
       onMessage(err instanceof Error ? err.message : "Ошибка");
@@ -318,9 +321,9 @@ export function RosterSection({
       {open && (
         <div className="p-4">
           <p className="text-sm text-gray-600 mb-3">
-            «По списку» равно числу активных людей. Шаблон: «Звание | Фамилия И.О.» или список с
-            колонками «№ | Воинское звание | Фамилия, имя, отчество». Старые трёхколоночные файлы
-            тоже поддерживаются.
+            «По списку» равно числу активных людей. Шаблон: «Воинское звание | Кафедра | Фамилия,
+            имя, отчество» или «Звание | Фамилия И.О.». Старые двух- и трёхколоночные файлы без
+            кафедры тоже поддерживаются.
           </p>
 
           <div className="flex flex-wrap gap-3 mb-3 items-center">
@@ -346,13 +349,22 @@ export function RosterSection({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Фамилия и инициалы</label>
+                  <label className="block text-xs text-gray-600 mb-1">ФИО</label>
                   <input
                     value={newFullName}
                     onChange={(e) => setNewFullName(e.target.value)}
                     placeholder="Иванов И.И."
                     className="border rounded px-2 py-1 text-sm"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Кафедра</label>
+                  <input
+                    value={newDepartment}
+                    onChange={(e) => setNewDepartment(e.target.value)}
+                    placeholder="61"
+                    className="border rounded px-2 py-1 text-sm w-20"
                   />
                 </div>
                 <button
@@ -420,7 +432,8 @@ export function RosterSection({
                 )}
                 <th>№</th>
                 <th>Звание</th>
-                <th>Фамилия и инициалы</th>
+                <th>Кафедра</th>
+                <th>ФИО</th>
                 <th>Причина отсутствия</th>
                 {editable && <th className="w-16"></th>}
               </tr>
@@ -428,7 +441,7 @@ export function RosterSection({
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={editable ? 6 : 5} className="text-gray-500 text-sm">
+                  <td colSpan={editable ? 7 : 6} className="text-gray-500 text-sm">
                     Список пуст — загрузите файл или добавьте человека вручную
                   </td>
                 </tr>
@@ -453,7 +466,8 @@ export function RosterSection({
                       </td>
                     )}
                     <td>{i + 1}</td>
-                    <td>{person.rank}</td>
+                    <td>{formatRank(person.rank)}</td>
+                    <td>{person.department_code || "—"}</td>
                     <td>{person.display_name || person.full_name}</td>
                     <td>{reasonForPerson(person.id)}</td>
                     {editable && (

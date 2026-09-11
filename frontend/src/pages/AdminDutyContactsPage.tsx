@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DutyContact, DutyPost, UnitRead, api } from "../api/client";
 import { onWsEvent } from "../api/ws";
 import { todayLocal } from "../utils/date";
+import { formatRank } from "../constants/ranks";
 
 const POST_GROUPS: { type: string; label: string }[] = [
   { type: "dpa", label: "ДПА — дежурный по академии" },
@@ -76,7 +77,7 @@ function DutyGroup({
                     )}
                   </td>
                   <td className="py-2 px-3 text-xs">{unitName}</td>
-                  <td className="py-2 px-3">{contact?.rank || "—"}</td>
+                  <td className="py-2 px-3">{contact?.rank ? formatRank(contact.rank) : "—"}</td>
                   <td className="py-2 px-3">{contact?.full_name || "—"}</td>
                   <td className="py-2 px-3">
                     {contact?.phone || (

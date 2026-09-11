@@ -20,8 +20,10 @@ from app.services.people import (
     find_match,
     format_display_name,
     format_initials,
+    format_rank,
     list_people,
     match_key,
+    normalize_department_code,
     parse_fio,
     sync_unit_strength_from_people,
 )
@@ -38,6 +40,7 @@ FIO_HEADERS = {
 }
 LAST_HEADERS = {"фамилия", "фамилии", "last_name", "lastname", "фамилия имя"}
 INIT_HEADERS = {"инициалы", "инициал", "и.", "initials", "имя"}
+DEPT_HEADERS = {"кафедра", "каф", "каф.", "department", "dept"}
 
 KNOWN_RANKS = sorted(
     {
@@ -77,6 +80,7 @@ class ParsedLine:
     last_name: str
     first_name: str
     source: str
+    department_code: str | None = None
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -113,6 +117,20 @@ def _is_init_header(name: str) -> bool:
     return name in INIT_HEADERS or "инициал" in name
 
 
+def _is_dept_header(name: str) -> bool:
+    if name in DEPT_HEADERS:
+        return True
+    return "кафедр" in name
+
+
+def _looks_like_department(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return False
+    cleaned = re.sub(r"[^\w]", "", text, flags=re.UNICODE)
+    return bool(cleaned) and len(cleaned) <= 10
+
+
 def _looks_like_row_number(value: str) -> bool:
     text = value.strip()
     if not text:
@@ -130,6 +148,7 @@ def _cell_looks_like_header(cell: str) -> bool:
         or _is_rank_header(name)
         or _is_fio_header(name)
         or _is_init_header(name)
+        or _is_dept_header(name)
         or name in LAST_HEADERS
     )
 
@@ -180,7 +199,11 @@ def _map_headers(row: list[str]) -> dict[str, int] | None:
             mapping["fio"] = idx
         elif (name in LAST_HEADERS or name.startswith("фамилия")) and "last" not in mapping:
             mapping["last"] = idx
+        elif _is_dept_header(name) and "dept" not in mapping:
+            mapping["dept"] = idx
 
+    if {"rank", "dept", "fio"} <= set(mapping):
+        return mapping
     if {"rank", "fio"} <= set(mapping):
         return mapping
     if {"rank", "last", "init"} <= set(mapping):
@@ -193,11 +216,23 @@ def _map_headers(row: list[str]) -> dict[str, int] | None:
 
 def _default_mapping(row: list[str]) -> dict[str, int]:
     non_empty = sum(1 for cell in row if cell.strip())
-    if non_empty >= 3 and _looks_like_row_number(row[0] if row else ""):
+    if non_empty >= 4 and _looks_like_row_number(row[0] if row else ""):
+        if len(row) >= 4 and _looks_like_department(row[2] if len(row) > 2 else ""):
+            return {"rank": 1, "dept": 2, "fio": 3}
         return {"rank": 1, "fio": 2}
+    if non_empty >= 3 and _looks_like_department(row[1] if len(row) > 1 else ""):
+        return {"rank": 0, "dept": 1, "fio": 2}
     if non_empty >= 3:
         return {"rank": 0, "last": 1, "init": 2}
     return {"rank": 0, "fio": 1}
+
+
+def _parse_department_cell(mapping: dict[str, int], row: list[str]) -> str | None:
+    if "dept" not in mapping:
+        return None
+    idx = mapping["dept"]
+    raw = (row[idx] if idx < len(row) else "").strip()
+    return normalize_department_code(raw)
 
 
 def _parse_name_cells(
@@ -246,7 +281,8 @@ def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
             continue
         if _is_header_row(row):
             continue
-        rank = (row[mapping["rank"]] if mapping["rank"] < len(row) else "").strip()
+        rank = format_rank((row[mapping["rank"]] if mapping["rank"] < len(row) else "").strip())
+        department_code = _parse_department_cell(mapping, row)
         last_name, first_name, name_warnings = _parse_name_cells(mapping, row)
         if not last_name and not rank and not first_name:
             continue
@@ -261,6 +297,7 @@ def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
                     last_name="",
                     first_name="",
                     source=source,
+                    department_code=department_code,
                     warnings=warnings,
                 )
             )
@@ -272,6 +309,7 @@ def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
                 last_name=last_name,
                 first_name=first_name,
                 source=source,
+                department_code=department_code,
                 warnings=warnings,
             )
         )
@@ -308,7 +346,7 @@ def _parse_loose_line(text: str, row_number: int) -> ParsedLine | None:
             last_name, first_name = parse_fio(rest)
             return ParsedLine(
                 row_number=row_number,
-                rank=rank,
+                rank=format_rank(rank),
                 last_name=last_name,
                 first_name=first_name,
                 source="text",
@@ -322,7 +360,7 @@ def _parse_loose_line(text: str, row_number: int) -> ParsedLine | None:
             last_name, first_name = parse_fio(parts[1])
             return ParsedLine(
                 row_number=row_number,
-                rank=parts[0].strip(),
+                rank=format_rank(parts[0].strip()),
                 last_name=last_name,
                 first_name=first_name,
                 source="text",
@@ -452,6 +490,7 @@ async def preview_import(
                 full_name=item.full_name,
                 last_name=item.last_name,
                 first_name=item.first_name,
+                department_code=item.department_code,
                 source=item.source,
                 action=action,
                 person_id=person_id,
@@ -467,10 +506,11 @@ async def preview_import(
                 rows.append(
                     RosterParseRow(
                         row_number=0,
-                        rank=person.rank,
+                        rank=format_rank(person.rank),
                         full_name=display_last_name(person),
                         last_name=person.last_name,
                         first_name=person.first_name,
+                        department_code=person.department_code,
                         source="db",
                         action="deactivate",
                         person_id=person.id,
@@ -510,7 +550,13 @@ async def apply_import(
             continue
         active, inactive = find_match(existing, row.last_name, row.first_name)
         if row.action == "add":
-            person = await create_person(session, unit, row.rank, row.full_name)
+            person = await create_person(
+                session,
+                unit,
+                row.rank,
+                row.full_name,
+                department_code=row.department_code,
+            )
             existing.append(person)
             matched_ids.add(person.id)
             added += 1
@@ -519,6 +565,7 @@ async def apply_import(
             person.rank = row.rank
             person.last_name = row.last_name
             person.first_name = row.first_name
+            person.department_code = normalize_department_code(row.department_code)
             person.is_active = True
             matched_ids.add(person.id)
             updated += 1
@@ -527,6 +574,7 @@ async def apply_import(
             person.rank = row.rank
             person.last_name = row.last_name
             person.first_name = row.first_name
+            person.department_code = normalize_department_code(row.department_code)
             person.is_active = True
             matched_ids.add(person.id)
             restored += 1
@@ -552,9 +600,9 @@ def export_xlsx(people: list[Person]) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Список"
-    ws.append(["Звание", "Фамилия И.О."])
+    ws.append(["Воинское звание", "Кафедра", "Фамилия И.О."])
     for person in people:
-        ws.append([person.rank, display_last_name(person)])
+        ws.append([format_rank(person.rank), person.department_code or "", display_last_name(person)])
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -565,14 +613,16 @@ def export_docx(people: list[Person], title: str) -> bytes:
 
     doc = Document()
     doc.add_heading(title, level=1)
-    table = doc.add_table(rows=1, cols=2)
+    table = doc.add_table(rows=1, cols=3)
     hdr = table.rows[0].cells
-    hdr[0].text = "Звание"
-    hdr[1].text = "Фамилия И.О."
+    hdr[0].text = "Воинское звание"
+    hdr[1].text = "Кафедра"
+    hdr[2].text = "Фамилия И.О."
     for person in people:
         cells = table.add_row().cells
-        cells[0].text = person.rank
-        cells[1].text = display_last_name(person)
+        cells[0].text = format_rank(person.rank)
+        cells[1].text = person.department_code or ""
+        cells[2].text = display_last_name(person)
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()

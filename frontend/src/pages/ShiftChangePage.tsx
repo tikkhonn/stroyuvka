@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DutyContact, api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useDutyOnboarding } from "../components/DutyOnboardingGate";
+import { formatRank } from "../constants/ranks";
 
 export function ShiftChangePage() {
   const { session } = useAuth();
@@ -48,7 +49,7 @@ export function ShiftChangePage() {
 
   const currentName =
     contact?.rank && contact?.full_name
-      ? `${contact.rank} ${contact.full_name}`
+      ? `${formatRank(contact.rank)} ${contact.full_name}`
       : contact?.post_name;
 
   return (

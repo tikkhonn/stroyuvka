@@ -16,6 +16,16 @@ def normalize_initials(value: str) -> str:
     return "".join(ch for ch in value.casefold() if ch.isalpha())
 
 
+def format_last_name(value: str) -> str:
+    text = " ".join(value.split()).strip()
+    if not text:
+        return text
+    return "-".join(
+        part[:1].upper() + part[1:].lower() if part else part
+        for part in text.split("-")
+    )
+
+
 def format_initials(raw: str) -> str:
     letters = [ch.upper() for ch in raw if ch.isalpha()]
     if len(letters) >= 2:
@@ -58,7 +68,7 @@ def parse_fio(value: str) -> tuple[str, str]:
     match = _FIO_RE.match(text)
     if not match:
         raise ValueError("Укажите фамилию и инициалы в формате «Иванов И.И.»")
-    last_name = match.group("last").strip()
+    last_name = format_last_name(match.group("last").strip())
     rest = match.group("init").strip()
     if _looks_like_initials(rest):
         initials = format_initials(rest)
@@ -75,6 +85,27 @@ def format_display_name(last_name: str, initials: str) -> str:
     return f"{last} {init}" if init else last
 
 
+def format_rank(value: str | None) -> str:
+    text = " ".join((value or "").split()).strip()
+    return text.casefold() if text else ""
+
+
+def normalize_department_code(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    cleaned = re.sub(r"[^\w]", "", text, flags=re.UNICODE)
+    return cleaned or None
+
+
+def department_display_name(code: str | None) -> str:
+    if not code:
+        return "Без кафедры"
+    return f"Кафедра {code}"
+
+
 def match_key(last_name: str, initials: str) -> tuple[str, str]:
     return normalize_last_name(last_name), normalize_initials(initials)
 
@@ -86,7 +117,13 @@ def display_last_name(person: Person) -> str:
 def person_to_read(person: Person) -> PersonRead:
     display = display_last_name(person)
     base = PersonRead.model_validate(person)
-    return base.model_copy(update={"full_name": display, "display_name": display})
+    return base.model_copy(
+        update={
+            "full_name": display,
+            "display_name": display,
+            "rank": format_rank(person.rank),
+        }
+    )
 
 
 def composition_for_unit(unit: Unit) -> Composition:
@@ -150,8 +187,9 @@ async def create_person(
     rank: str,
     full_name: str,
     middle_name: str | None = None,
+    department_code: str | None = None,
 ) -> Person:
-    rank = rank.strip()
+    rank = format_rank(rank)
     if not rank:
         raise ValueError("Укажите звание")
     last_name, first_name = parse_fio(full_name)
@@ -162,6 +200,7 @@ async def create_person(
         last_name=last_name,
         first_name=first_name,
         middle_name=(middle_name or "").strip() or None,
+        department_code=normalize_department_code(department_code),
         composition=composition_for_unit(unit),
         is_active=True,
     )
@@ -178,6 +217,8 @@ async def update_person(
     rank: str | None = None,
     full_name: str | None = None,
     middle_name: str | None = None,
+    department_code: str | None = None,
+    department_code_set: bool = False,
     is_active: bool | None = None,
 ) -> Person:
     next_last = person.last_name
@@ -190,7 +231,7 @@ async def update_person(
             session, person.unit_id, next_last, next_first, exclude_id=person.id
         )
     if rank is not None:
-        person.rank = rank.strip()
+        person.rank = format_rank(rank)
         if not person.rank:
             raise ValueError("Укажите звание")
     if full_name is not None:
@@ -198,6 +239,8 @@ async def update_person(
         person.first_name = next_first
     if middle_name is not None:
         person.middle_name = middle_name.strip() or None
+    if department_code_set:
+        person.department_code = normalize_department_code(department_code)
     if is_active is not None:
         person.is_active = is_active
     await session.flush()

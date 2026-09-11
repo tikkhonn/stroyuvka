@@ -8,6 +8,7 @@ from app.api.routers import (
     audit,
     auth,
     chat,
+    documentation,
     duty_posts,
     landline_phones,
     print as print_router,
@@ -67,6 +68,7 @@ app.include_router(units.router, prefix="/api")
 app.include_router(attendance.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(documentation.router, prefix="/api")
 app.include_router(landline_phones.router, prefix="/api")
 app.include_router(duty_posts.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
