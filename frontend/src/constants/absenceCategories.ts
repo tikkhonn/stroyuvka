@@ -137,21 +137,21 @@ export const ABSENCE_CATEGORY_HEX: Record<AbsenceCategoryKey, string> = {
   arrest: "#334155",
 };
 
-/** Solid muted fill for expense summary cards. */
+/** Solid fill for expense summary cards (muted, slightly bright). */
 export const SUMMARY_CARD_BG_CLASS: Record<
   AbsenceCategoryKey | "total_list" | "present",
   string
 > = {
-  total_list: "bg-[#4A5D72]",
-  present: "bg-[#4A7A62]",
-  duty: "bg-[#556B82]",
-  trip: "bg-[#4F7370]",
-  leave: "bg-[#6B7548]",
-  sick: "bg-[#8F5555]",
-  dismissal: "bg-[#8A7048]",
-  away_dorm: "bg-[#926448]",
-  other: "bg-[#7A5580]",
-  arrest: "bg-[#5A6270]",
+  total_list: "bg-[#5E7390]",
+  present: "bg-[#5A9978]",
+  duty: "bg-[#6889A8]",
+  trip: "bg-[#609690]",
+  leave: "bg-[#849858]",
+  sick: "bg-[#AB6969]",
+  dismissal: "bg-[#A88858]",
+  away_dorm: "bg-[#B07858]",
+  other: "bg-[#946898]",
+  arrest: "bg-[#6E7890]",
 };
 
 export function absenceCategoryTextClass(code: string): string {

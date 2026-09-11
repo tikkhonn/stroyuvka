@@ -31,7 +31,7 @@ const ITEMS: { key: SummaryCardKey; label: string }[] = [
 ];
 
 const GLASS_OVERLAY =
-  "before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-br before:from-white/20 before:via-white/5 before:to-black/5 after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:ring-1 after:ring-inset after:ring-white/15";
+  "before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-br before:from-white/28 before:via-white/10 before:to-transparent after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:ring-1 after:ring-inset after:ring-white/22";
 
 export function SummaryCards({ agg, hints }: SummaryCardsProps) {
   return (
@@ -41,7 +41,7 @@ export function SummaryCards({ agg, hints }: SummaryCardsProps) {
         return (
           <div
             key={item.key}
-            className={`relative overflow-hidden rounded-xl p-3 min-h-[4.75rem] text-white/95 shadow-md border border-white/15 backdrop-blur-sm ${GLASS_OVERLAY} ${SUMMARY_CARD_BG_CLASS[item.key]}`}
+            className={`relative overflow-hidden rounded-xl p-3 min-h-[4.75rem] text-white shadow-vka border border-white/20 backdrop-blur-sm ${GLASS_OVERLAY} ${SUMMARY_CARD_BG_CLASS[item.key]}`}
           >
             <div className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-white/20 p-2 backdrop-blur-sm">
               <Icon className="w-6 h-6" />
