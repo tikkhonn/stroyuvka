@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChessboardResponse, ChessboardRow, ChessboardSickSummary, api } from "../api/client";
+import { ChessboardResponse, ChessboardRow, ChessboardSickByHospital, ChessboardSickEntry, ChessboardSickSummary, api } from "../api/client";
 import { todayLocal } from "../utils/date";
 import { StatusBadge } from "../components/StatusBadge";
 import { aggregateCellClass } from "../components/SummaryCards";
@@ -19,6 +19,7 @@ const COLS = [
   { key: "dismissal", label: "Увольн." },
   { key: "away_dorm", label: "Вне общ." },
   { key: "other", label: "Прочее" },
+  { key: "arrest", label: "Арест" },
 ] as const;
 
 const KNOWN_LOCATIONS: { id: number; name: string }[] = [
@@ -84,22 +85,66 @@ function formatDateRu(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
+function hospitalBuckets(entries: ChessboardSickEntry[]): ChessboardSickByHospital[] {
+  const map = new Map<string, ChessboardSickByHospital>();
+  for (const entry of entries) {
+    const hospital_id = entry.hospital_id ?? null;
+    const hospital_name = entry.hospital_name || "Не указано";
+    const key = `${hospital_id ?? "none"}:${hospital_name}`;
+    const current = map.get(key);
+    if (current) current.count += 1;
+    else map.set(key, { hospital_id, hospital_name, count: 1 });
+  }
+  return [...map.values()].sort((a, b) => {
+    if (a.hospital_id == null && b.hospital_id != null) return 1;
+    if (a.hospital_id != null && b.hospital_id == null) return -1;
+    return a.hospital_name.localeCompare(b.hospital_name, "ru");
+  });
+}
+
 function filterSickSummary(
   summary: ChessboardSickSummary,
   panelFilter: PanelFilter
 ): ChessboardSickSummary {
-  if (panelFilter === "all" || panelFilter === "sick") return summary;
+  if (panelFilter === "all" || panelFilter === "sick") {
+    return {
+      ...summary,
+      by_hospital: summary.by_hospital?.length ? summary.by_hospital : hospitalBuckets(summary.entries),
+    };
+  }
   const entries = summary.entries.filter((e) => e.location_id === panelFilter);
   const loc = summary.by_location.find((b) => b.location_id === panelFilter);
   return {
     total: entries.length,
     by_location: loc ? [loc] : [],
+    by_hospital: hospitalBuckets(entries),
     officers_count: 0,
     entries,
   };
 }
 
+function hospitalFilterKey(hospitalId: number | null | undefined): number | "none" {
+  return hospitalId == null ? "none" : hospitalId;
+}
+
 function SickListTable({ summary }: { summary: ChessboardSickSummary }) {
+  const [hospitalFilter, setHospitalFilter] = useState<number | "all" | "none">("all");
+  const hospitals = summary.by_hospital?.length
+    ? summary.by_hospital
+    : hospitalBuckets(summary.entries);
+
+  useEffect(() => {
+    setHospitalFilter("all");
+  }, [summary.entries]);
+
+  const entries = useMemo(() => {
+    if (hospitalFilter === "all") return summary.entries;
+    if (hospitalFilter === "none") {
+      return summary.entries.filter((e) => e.hospital_id == null);
+    }
+    return summary.entries.filter((e) => e.hospital_id === hospitalFilter);
+  }, [summary.entries, hospitalFilter]);
+
   if (summary.total === 0) {
     return (
       <div className="bg-white rounded-lg shadow px-4 py-8 text-center text-gray-500">
@@ -109,33 +154,72 @@ function SickListTable({ summary }: { summary: ChessboardSickSummary }) {
   }
 
   return (
-    <div className="overflow-x-auto bg-white rounded-lg shadow">
-      <table className="vka-table w-full min-w-[720px]">
-        <thead>
-          <tr>
-            <th>№</th>
-            <th>ФИО</th>
-            <th>Подразделение</th>
-            <th>Факультет</th>
-            <th>Расположение</th>
-            <th>С</th>
-          </tr>
-        </thead>
-        <tbody>
-          {summary.entries.map((entry, i) => (
-            <tr key={entry.id}>
-              <td className="text-gray-500">{i + 1}</td>
-              <td className={`font-medium text-left ${absenceCategoryTextClass("sick")}`}>
-                {formatAbsenceName(entry)}
-              </td>
-              <td className="text-left">{entry.unit_name}</td>
-              <td>{entry.faculty_name || "—"}</td>
-              <td>{entry.location_name || "—"}</td>
-              <td className="whitespace-nowrap">{formatDateRu(entry.status_date)}</td>
+    <div className="space-y-3">
+      {hospitals.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setHospitalFilter("all")}
+            className={`rounded-full border px-3 py-1 text-sm ${
+              hospitalFilter === "all"
+                ? "border-red-600 bg-red-600 text-white"
+                : "border-gray-200 bg-white hover:border-red-400"
+            }`}
+          >
+            Все · {summary.total}
+          </button>
+          {hospitals.map((h) => {
+            const key = hospitalFilterKey(h.hospital_id);
+            const active = hospitalFilter === key;
+            return (
+              <button
+                type="button"
+                key={`${h.hospital_id ?? "none"}-${h.hospital_name}`}
+                onClick={() => setHospitalFilter(key)}
+                className={`rounded-full border px-3 py-1 text-sm ${
+                  active
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-gray-200 bg-white hover:border-red-400"
+                }`}
+              >
+                {h.hospital_name} · {h.count}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="overflow-x-auto bg-white rounded-lg shadow">
+        <table className="vka-table w-full min-w-[860px]">
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>ФИО</th>
+              <th>Подразделение</th>
+              <th>Факультет</th>
+              <th>Расположение</th>
+              <th>Мед. учреждение</th>
+              <th>Диагноз</th>
+              <th>С</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {entries.map((entry, i) => (
+              <tr key={entry.id}>
+                <td className="text-gray-500">{i + 1}</td>
+                <td className={`font-medium text-left ${absenceCategoryTextClass("sick")}`}>
+                  {formatAbsenceName(entry)}
+                </td>
+                <td className="text-left">{entry.unit_name}</td>
+                <td>{entry.faculty_name || "—"}</td>
+                <td>{entry.location_name || "—"}</td>
+                <td className="text-left">{entry.hospital_name || "Не указано"}</td>
+                <td className="text-left">{entry.note?.trim() || "—"}</td>
+                <td className="whitespace-nowrap">{formatDateRu(entry.status_date)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -334,7 +418,7 @@ export function ChessboardPage() {
         <SickListTable summary={sickData} />
       ) : view === "location" ? (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
-          <table className="vka-table w-full min-w-[1100px]">
+          <table className="vka-table w-full min-w-[1240px]">
             <thead>
               <tr>
                 <th>Расположение</th>
@@ -420,7 +504,7 @@ export function ChessboardPage() {
         </div>
       ) : (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
-          <table className="vka-table w-full min-w-[1100px]">
+          <table className="vka-table w-full min-w-[1240px]">
             <thead>
               <tr>
                 <th>Факультет</th>

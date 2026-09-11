@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { todayLocal } from "../utils/date";
-import { UnitRead, api } from "../api/client";
+import { UnitRead, api, downloadFile } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ABSENCE_CATEGORY_OPTIONS } from "../constants/absenceCategories";
 
@@ -93,6 +93,19 @@ export function PrintPage() {
     if (w) {
       w.document.write(html);
       w.document.close();
+    }
+  };
+
+  const exportRashodXlsx = async () => {
+    try {
+      const [y, m, d] = date.split("-");
+      const stamp = y && m && d ? `${d}.${m}.${y}` : date;
+      await downloadFile(
+        `/api/print/sick.xlsx?report_date=${date}`,
+        `Расход ${stamp}.xlsx`
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Ошибка скачивания");
     }
   };
 
@@ -217,6 +230,13 @@ export function PrintPage() {
           className="inline-block bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light"
         >
           Открыть и печатать
+        </button>
+        <button
+          type="button"
+          onClick={() => void exportRashodXlsx()}
+          className="inline-block bg-white text-vka-navy border border-vka-navy px-4 py-2 rounded hover:bg-vka-cream"
+        >
+          Скачать Excel
         </button>
       </div>
     </div>

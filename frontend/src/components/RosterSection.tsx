@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AbsenceCategoryOption,
   AbsenceEntry,
+  Hospital,
   PersonRead,
   RosterImportPreview,
   RosterImportResult,
@@ -9,10 +10,16 @@ import {
   downloadFile,
   uploadApi,
 } from "../api/client";
-import { formatAbsenceReason, absenceCategoryRowClass } from "../constants/absenceCategories";
+import { HospitalSelect } from "./HospitalSelect";
+import {
+  formatAbsenceReason,
+  absenceCategoryRowClass,
+  isSickCategory,
+} from "../constants/absenceCategories";
 import { RANK_SUGGESTIONS, formatRank } from "../constants/ranks";
 
 type ImportMode = "upsert" | "replace";
+type SickDraft = { person_id: number; hospital_id: number | null; note: string };
 
 type Props = {
   unitId: number;
@@ -21,6 +28,7 @@ type Props = {
   absenceByPersonId: Map<number, AbsenceEntry>;
   editable: boolean;
   categories: AbsenceCategoryOption[];
+  hospitals: Hospital[];
   saving: boolean;
   onReload: () => Promise<void>;
   onMessage: (text: string) => void;
@@ -34,6 +42,7 @@ export function RosterSection({
   absenceByPersonId,
   editable,
   categories,
+  hospitals,
   saving,
   onReload,
   onMessage,
@@ -52,6 +61,7 @@ export function RosterSection({
   const [preview, setPreview] = useState<RosterImportPreview | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("upsert");
+  const [sickDrafts, setSickDrafts] = useState<SickDraft[] | null>(null);
 
   useEffect(() => {
     if (!editable) {
@@ -180,8 +190,23 @@ export function RosterSection({
       return;
     }
     const cat = categories.find((c) => c.code === bulkCategory);
+    if (isSickCategory(bulkCategory)) {
+      if (hospitals.length === 0) {
+        onMessage("Справочник мед. учреждений пуст — обратитесь к администратору");
+        return;
+      }
+      const defaultHospital = hospitals.length === 1 ? hospitals[0].id : null;
+      setSickDrafts(
+        ids.map((person_id) => ({
+          person_id,
+          hospital_id: defaultHospital,
+          note: "",
+        }))
+      );
+      return;
+    }
     if (cat?.detail_required && !bulkNote.trim()) {
-      onMessage("Укажите уточнение (вид наряда / где болен)");
+      onMessage("Укажите уточнение (вид наряда)");
       return;
     }
     setSaving(true);
@@ -201,6 +226,42 @@ export function RosterSection({
         return next;
       });
       if (!bulkDetailRequired) setBulkNote("");
+      await onReload();
+    } catch (err) {
+      onMessage(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveSickDrafts = async () => {
+    if (!sickDrafts || sickDrafts.length === 0) return;
+    if (sickDrafts.some((row) => !row.hospital_id)) {
+      onMessage("Укажите мед. учреждение у каждого больного");
+      return;
+    }
+    setSaving(true);
+    onMessage("");
+    try {
+      await api(`/api/attendance/${unitId}/absences?report_date=${reportDate}`, {
+        method: "POST",
+        body: JSON.stringify({
+          category_code: "sick",
+          people: sickDrafts.map((row) => ({
+            person_id: row.person_id,
+            hospital_id: row.hospital_id,
+            note: row.note.trim() || null,
+          })),
+        }),
+      });
+      const marked = new Set(sickDrafts.map((row) => row.person_id));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of marked) next.delete(id);
+        return next;
+      });
+      setSickDrafts(null);
+      setBulkNote("");
       await onReload();
     } catch (err) {
       onMessage(err instanceof Error ? err.message : "Ошибка");
@@ -257,7 +318,12 @@ export function RosterSection({
   const reasonForPerson = (personId: number) => {
     const absence = absenceByPersonId.get(personId);
     if (!absence) return "в строю";
-    return formatAbsenceReason(absence.category_code, absence.status_date, absence.note);
+    return formatAbsenceReason(
+      absence.category_code,
+      absence.status_date,
+      absence.note,
+      absence.hospital_name
+    );
   };
 
   return (
@@ -398,16 +464,18 @@ export function RosterSection({
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Уточнение</label>
-                    <input
-                      value={bulkNote}
-                      onChange={(e) => setBulkNote(e.target.value)}
-                      placeholder={bulkDetailRequired ? "обязательно" : "необяз."}
-                      className="border rounded px-2 py-1 text-sm"
-                      required={bulkDetailRequired}
-                    />
-                  </div>
+                  {!isSickCategory(bulkCategory) && (
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Уточнение</label>
+                      <input
+                        value={bulkNote}
+                        onChange={(e) => setBulkNote(e.target.value)}
+                        placeholder={bulkDetailRequired ? "обязательно" : "необяз."}
+                        className="border rounded px-2 py-1 text-sm"
+                        required={bulkDetailRequired}
+                      />
+                    </div>
+                  )}
                   <button
                     type="submit"
                     disabled={saving || selected.size === 0}
@@ -494,6 +562,89 @@ export function RosterSection({
               <option key={r} value={r} />
             ))}
           </datalist>
+        </div>
+      )}
+
+      {sickDrafts && (
+        <div className="fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 shadow-xl">
+            <h4 className="font-serif text-lg font-bold text-vka-navy mb-1">Больные</h4>
+            <p className="text-sm text-gray-600 mb-3">
+              Укажите мед. учреждение для каждого. Диагноз — по желанию.
+            </p>
+            <table className="vka-table w-full">
+              <thead>
+                <tr>
+                  <th>ФИО</th>
+                  <th>Мед. учреждение</th>
+                  <th>Диагноз</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sickDrafts.map((row) => {
+                  const person = people.find((p) => p.id === row.person_id);
+                  return (
+                    <tr key={row.person_id}>
+                      <td>{person?.display_name || person?.full_name || row.person_id}</td>
+                      <td>
+                        <HospitalSelect
+                          hospitals={hospitals}
+                          value={row.hospital_id}
+                          required
+                          onChange={(hospital_id) =>
+                            setSickDrafts((prev) =>
+                              prev
+                                ? prev.map((item) =>
+                                    item.person_id === row.person_id
+                                      ? { ...item, hospital_id }
+                                      : item
+                                  )
+                                : prev
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={row.note}
+                          onChange={(e) =>
+                            setSickDrafts((prev) =>
+                              prev
+                                ? prev.map((item) =>
+                                    item.person_id === row.person_id
+                                      ? { ...item, note: e.target.value }
+                                      : item
+                                  )
+                                : prev
+                            )
+                          }
+                          className="border rounded px-2 py-1 text-sm w-full"
+                          placeholder="необяз."
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                className="px-3 py-2 text-sm rounded border"
+                onClick={() => setSickDrafts(null)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={saving || sickDrafts.some((row) => !row.hospital_id)}
+                onClick={() => void saveSickDrafts()}
+                className="px-3 py-2 text-sm rounded bg-vka-navy text-white disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

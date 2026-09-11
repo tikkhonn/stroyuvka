@@ -12,6 +12,7 @@ import { HelpPage } from "../pages/HelpPage";
 import { StroevkaReviewPage } from "../pages/StroevkaReviewPage";
 import { ShiftChangePage } from "../pages/ShiftChangePage";
 import { AdminUnitsPage, AuditPage } from "../pages/AdminPages";
+import { AdminHospitalsPage } from "../pages/AdminHospitalsPage";
 import { AdminDutyContactsPage } from "../pages/AdminDutyContactsPage";
 import { ChiefOverviewPage } from "../pages/ChiefOverviewPage";
 import { ChiefTrendsPage } from "../pages/ChiefTrendsPage";
@@ -170,6 +171,14 @@ export function AppRouter() {
                   element={
                     <RequireShell shells={["admin"]}>
                       <AdminUnitsPage />
+                    </RequireShell>
+                  }
+                />
+                <Route
+                  path="/admin/hospitals"
+                  element={
+                    <RequireShell shells={["admin"]}>
+                      <AdminHospitalsPage />
                     </RequireShell>
                   }
                 />

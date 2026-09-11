@@ -172,6 +172,14 @@ export interface AttendanceAggregate {
   dismissal: number;
   away_dorm: number;
   other: number;
+  arrest: number;
+}
+
+export interface Hospital {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
 export interface AbsenceEntry {
@@ -183,6 +191,8 @@ export interface AbsenceEntry {
   rank: string;
   last_name: string;
   note: string | null;
+  hospital_id?: number | null;
+  hospital_name?: string | null;
   editable: boolean;
 }
 
@@ -318,6 +328,7 @@ export interface ChessboardRow {
   dismissal: number;
   away_dorm: number;
   other: number;
+  arrest: number;
   status: ReportStatus;
 }
 
@@ -332,6 +343,8 @@ export interface ChessboardSickEntry {
   rank: string;
   last_name: string;
   note: string | null;
+  hospital_id?: number | null;
+  hospital_name?: string | null;
   status_date: string;
 }
 
@@ -341,9 +354,16 @@ export interface ChessboardSickByLocation {
   count: number;
 }
 
+export interface ChessboardSickByHospital {
+  hospital_id: number | null;
+  hospital_name: string;
+  count: number;
+}
+
 export interface ChessboardSickSummary {
   total: number;
   by_location: ChessboardSickByLocation[];
+  by_hospital?: ChessboardSickByHospital[];
   officers_count: number;
   entries: ChessboardSickEntry[];
 }

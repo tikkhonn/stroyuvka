@@ -58,6 +58,10 @@ def _category_code(entry: AbsenceEntryRead) -> str:
 def _absence_reason(entry: AbsenceEntryRead) -> str:
     code = _category_code(entry)
     label = CATEGORY_LABELS.get(code, code)
+    if code in ("sick", "sick_med", "sick_hosp"):
+        if entry.hospital_name:
+            return f"{label} ({entry.hospital_name})"
+        return label
     if entry.note:
         return f"{label} ({entry.note})"
     return label
@@ -80,6 +84,7 @@ def _summary_row(idx: int, unit_name: str, agg: AttendanceAggregate) -> str:
       <td>{_cell(agg.sick)}</td>
       <td>{_cell(agg.dismissal)}</td>
       <td>{_cell(_other_count(agg))}</td>
+      <td>{_cell(agg.arrest)}</td>
     </tr>"""
 
 
@@ -206,6 +211,7 @@ def _build_html(subtitle: str, summary_rows: list[tuple[str, AttendanceAggregate
         <th>Болен</th>
         <th>Увольнение</th>
         <th>Прочее</th>
+        <th>Арест</th>
       </tr>
     </thead>
     <tbody>{summary_body}

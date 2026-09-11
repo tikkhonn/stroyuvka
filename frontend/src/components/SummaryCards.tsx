@@ -1,48 +1,69 @@
+import type { ReactNode } from "react";
 import type { AttendanceAggregate } from "../api/client";
 import {
   type AbsenceCategoryKey,
-  ABSENCE_CATEGORY_TEXT_CLASS,
   AGGREGATE_NEUTRAL_TEXT_CLASS,
+  SUMMARY_CARD_BG_CLASS,
   absenceCategoryTextClass,
-  aggregateBarClass,
 } from "../constants/absenceCategories";
+import { SUMMARY_ICONS } from "./summaryIcons";
+
+type SummaryCardKey = keyof AttendanceAggregate;
 
 type SummaryCardsProps = {
   agg: AttendanceAggregate;
+  hints?: Partial<Record<SummaryCardKey, ReactNode>>;
 };
 
 const NEUTRAL_CLASS = AGGREGATE_NEUTRAL_TEXT_CLASS;
 
-export function SummaryCards({ agg }: SummaryCardsProps) {
-  const items: {
-    key: keyof AttendanceAggregate;
-    label: string;
-    value: number;
-    valueClass: string;
-    barClass: string;
-  }[] = [
-    { key: "total_list", label: "По списку", value: agg.total_list, valueClass: NEUTRAL_CLASS, barClass: aggregateBarClass("total_list") },
-    { key: "present", label: "Налицо", value: agg.present, valueClass: NEUTRAL_CLASS, barClass: aggregateBarClass("present") },
-    { key: "duty", label: "Наряд", value: agg.duty, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.duty, barClass: aggregateBarClass("duty") },
-    { key: "trip", label: "Команд.", value: agg.trip, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.trip, barClass: aggregateBarClass("trip") },
-    { key: "leave", label: "Отпуск", value: agg.leave, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.leave, barClass: aggregateBarClass("leave") },
-    { key: "sick", label: "Болен", value: agg.sick, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.sick, barClass: aggregateBarClass("sick") },
-    { key: "dismissal", label: "Увольн.", value: agg.dismissal, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.dismissal, barClass: aggregateBarClass("dismissal") },
-    { key: "away_dorm", label: "Вне общ.", value: agg.away_dorm, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.away_dorm, barClass: aggregateBarClass("away_dorm") },
-    { key: "other", label: "Прочее", value: agg.other, valueClass: ABSENCE_CATEGORY_TEXT_CLASS.other, barClass: aggregateBarClass("other") },
-  ];
+const ITEMS: { key: SummaryCardKey; label: string }[] = [
+  { key: "total_list", label: "По списку" },
+  { key: "present", label: "Налицо" },
+  { key: "duty", label: "Наряд" },
+  { key: "trip", label: "Командировка" },
+  { key: "leave", label: "Отпуск" },
+  { key: "sick", label: "Болен" },
+  { key: "dismissal", label: "Увольнение" },
+  { key: "away_dorm", label: "Вне общ." },
+  { key: "other", label: "Прочее" },
+  { key: "arrest", label: "Арест" },
+];
 
+const GLASS_OVERLAY =
+  "before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-br before:from-white/20 before:via-white/5 before:to-black/5 after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:ring-1 after:ring-inset after:ring-white/15";
+
+export function SummaryCards({ agg, hints }: SummaryCardsProps) {
   return (
-    <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3 mb-8">
-      {items.map((item) => (
-        <div key={item.key} className="stat-card !p-3 text-center">
-          <div className={`stat-card__bar ${item.barClass}`} aria-hidden />
-          <p className={`text-2xl font-serif font-bold ${item.valueClass}`}>{item.value}</p>
-          <p className="text-[10px] text-gray-500 mt-2 uppercase tracking-wide leading-tight">
-            {item.label}
-          </p>
-        </div>
-      ))}
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
+      {ITEMS.map((item) => {
+        const Icon = SUMMARY_ICONS[item.key];
+        return (
+          <div
+            key={item.key}
+            className={`relative overflow-hidden rounded-xl p-3 min-h-[4.75rem] text-white/95 shadow-md border border-white/15 backdrop-blur-sm ${GLASS_OVERLAY} ${SUMMARY_CARD_BG_CLASS[item.key]}`}
+          >
+            <div className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-white/20 p-2 backdrop-blur-sm">
+              <Icon className="w-6 h-6" />
+            </div>
+
+            <div className="relative z-10">
+              <div className="px-9 text-center">
+                <p className="text-4xl font-serif font-bold leading-none tabular-nums drop-shadow-sm">
+                  {agg[item.key]}
+                </p>
+                {hints?.[item.key] ? (
+                  <div className="mt-1 flex justify-center text-white/90">{hints[item.key]}</div>
+                ) : null}
+              </div>
+
+              <p className="mt-2 text-[10px] uppercase tracking-wide leading-tight text-white/90 text-right">
+                {item.label}
+              </p>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

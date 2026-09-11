@@ -2,6 +2,7 @@ from datetime import date
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.enums import (
     ABSENCE_CATEGORY_DEFS,
@@ -10,10 +11,12 @@ from app.core.enums import (
     ReportStatus,
     UnitType,
 )
-from app.models import AbsenceEntry, CourseReport, FacultyReport, Person, Unit
+from app.models import AbsenceCategory, AbsenceEntry, CourseReport, FacultyReport, Hospital, Person, Unit
 from app.schemas import (
     AbsenceEntryCreate,
+    AbsenceEntryPatch,
     AbsenceEntryRead,
+    AbsencePersonItem,
     AttendanceAggregate,
     AttendanceSnapshot,
     DepartmentStroevkaSummary,
@@ -38,6 +41,7 @@ PERSISTENT_ABSENCE_CODES = frozenset(
         AbsenceCategoryCode.SICK,
         AbsenceCategoryCode.TRIP,
         AbsenceCategoryCode.LEAVE,
+        AbsenceCategoryCode.ARREST,
         AbsenceCategoryCode.SICK_MED,
         AbsenceCategoryCode.SICK_HOSP,
     }
@@ -55,6 +59,7 @@ def empty_aggregate() -> AttendanceAggregate:
         dismissal=0,
         away_dorm=0,
         other=0,
+        arrest=0,
     )
 
 
@@ -69,7 +74,8 @@ def sum_aggregates(parts: list[AttendanceAggregate]) -> AttendanceAggregate:
     dismissal = sum(p.dismissal for p in parts)
     away_dorm = sum(p.away_dorm for p in parts)
     other = sum(p.other for p in parts)
-    total_absent = duty + trip + leave + sick + dismissal + away_dorm + other
+    arrest = sum(p.arrest for p in parts)
+    total_absent = duty + trip + leave + sick + dismissal + away_dorm + other + arrest
     return AttendanceAggregate(
         total_list=total_list,
         present=max(0, total_list - total_absent),
@@ -80,6 +86,7 @@ def sum_aggregates(parts: list[AttendanceAggregate]) -> AttendanceAggregate:
         dismissal=dismissal,
         away_dorm=away_dorm,
         other=other,
+        arrest=arrest,
     )
 
 
@@ -118,6 +125,7 @@ def aggregate_from_entries(
         dismissal=counts[AbsenceCategoryCode.DISMISSAL],
         away_dorm=counts[AbsenceCategoryCode.AWAY_DORM],
         other=counts[AbsenceCategoryCode.OTHER],
+        arrest=counts[AbsenceCategoryCode.ARREST],
     )
 
 
@@ -165,6 +173,34 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
             "ADD COLUMN IF NOT EXISTS department_code VARCHAR(32)"
         )
     )
+    await session.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS hospitals ("
+            "id SERIAL PRIMARY KEY, "
+            "name VARCHAR(255) NOT NULL, "
+            "sort_order INTEGER NOT NULL DEFAULT 0, "
+            "is_active BOOLEAN NOT NULL DEFAULT TRUE"
+            ")"
+        )
+    )
+    await session.execute(
+        text(
+            "ALTER TABLE absence_entries "
+            "ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)"
+        )
+    )
+    existing_hospital = await session.scalar(select(Hospital.id).limit(1))
+    if existing_hospital is None:
+        session.add(Hospital(name="Медпункт", sort_order=0, is_active=True))
+        session.add(Hospital(name="Госпиталь", sort_order=1, is_active=True))
+
+    arrest_cat = await session.scalar(
+        select(AbsenceCategory).where(AbsenceCategory.code == "arrest")
+    )
+    if arrest_cat is None:
+        session.add(
+            AbsenceCategory(code=AbsenceCategoryCode.ARREST, label="Арест", sort_order=8)
+        )
     await session.flush()
 
 
@@ -178,6 +214,7 @@ async def list_absence_entries(
     """Строки расхода на дату: дневные — только за report_date, длительные — с даты начала."""
     result = await session.execute(
         select(AbsenceEntry)
+        .options(selectinload(AbsenceEntry.hospital))
         .where(AbsenceEntry.unit_id == unit_id)
         .order_by(AbsenceEntry.status_date, AbsenceEntry.id)
     )
@@ -198,6 +235,49 @@ def _entry_visible_on_date(entry: AbsenceEntry, report_date: date) -> bool:
     if code in PERSISTENT_ABSENCE_CODES:
         return entry.status_date <= report_date
     return entry.status_date == report_date
+
+
+def _is_sick(code) -> bool:
+    return _normalize_code(code) == AbsenceCategoryCode.SICK
+
+
+async def _resolve_hospital_id(session: AsyncSession, hospital_id: int | None) -> int:
+    from app.services.hospitals import get_active_hospital
+
+    if not hospital_id:
+        raise ValueError("Укажите мед. учреждение")
+    hospital = await get_active_hospital(session, hospital_id)
+    return hospital.id
+
+
+def _entries_missing_hospital(entries: list[AbsenceEntry]) -> list[AbsenceEntry]:
+    return [e for e in entries if _is_sick(e.category_code) and not e.hospital_id]
+
+
+async def _load_entry_hospitals(session: AsyncSession, entries: list[AbsenceEntry]) -> None:
+    for entry in entries:
+        if entry.hospital_id:
+            await session.refresh(entry, attribute_names=["hospital"])
+
+
+async def sick_without_hospital_message(
+    session: AsyncSession, unit_id: int, report_date: date
+) -> str | None:
+    entries = await list_absence_entries(session, unit_id, report_date)
+    missing = _entries_missing_hospital(entries)
+    if not missing:
+        return None
+    names = ", ".join(e.last_name for e in missing[:5])
+    extra = f" и ещё {len(missing) - 5}" if len(missing) > 5 else ""
+    return f"Укажите мед. учреждение у всех больных перед отправкой: {names}{extra}"
+
+
+async def assert_unit_sick_have_hospitals(
+    session: AsyncSession, unit_id: int, report_date: date
+) -> None:
+    message = await sick_without_hospital_message(session, unit_id, report_date)
+    if message:
+        raise ValueError(message)
 
 
 async def _get_or_create_course_report(
@@ -254,13 +334,36 @@ async def add_absence_entry(
         label = next(l for c, l, _ in ABSENCE_CATEGORY_DEFS if c == code.value)
         raise ValueError(f"Для категории «{label}» укажите уточнение")
 
+    hospital_id: int | None = None
+    if _is_sick(code) and not body.people:
+        hospital_id = await _resolve_hospital_id(session, body.hospital_id)
+
     entries = await list_absence_entries(session, unit_id, report_date)
     total = await get_unit_strength(session, unit_id)
 
-    if body.person_ids:
+    specs: list[AbsencePersonItem] = list(body.people)
+    if not specs and body.person_ids:
+        specs = [
+            AbsencePersonItem(
+                person_id=pid, hospital_id=hospital_id, note=detail or None
+            )
+            for pid in body.person_ids
+        ]
+
+    if specs:
+        if _is_sick(code):
+            for item in specs:
+                item.hospital_id = await _resolve_hospital_id(session, item.hospital_id)
+                item.note = (item.note or "").strip() or None
+        else:
+            for item in specs:
+                item.hospital_id = None
+                if item.note is None:
+                    item.note = detail or None
         created = await _add_absences_for_people(
-            session, unit, report_date, code, detail or None, body.person_ids, entries, total
+            session, unit, report_date, code, specs, entries, total
         )
+        await _load_entry_hospitals(session, created)
         notify = await mark_course_changed_if_submitted(session, unit, report_date)
         return created, notify
 
@@ -293,9 +396,11 @@ async def add_absence_entry(
         rank=rank,
         last_name=last_name,
         note=detail or None,
+        hospital_id=hospital_id if _is_sick(code) else None,
     )
     session.add(entry)
     await session.flush()
+    await _load_entry_hospitals(session, [entry])
     notify = await mark_course_changed_if_submitted(session, unit, report_date)
     return [entry], notify
 
@@ -305,24 +410,29 @@ async def _add_absences_for_people(
     unit: Unit,
     report_date: date,
     code: AbsenceCategoryCode,
-    note: str | None,
-    person_ids: list[int],
+    specs: list[AbsencePersonItem],
     entries: list[AbsenceEntry],
     total: int,
 ) -> list[AbsenceEntry]:
-    unique_ids = list(dict.fromkeys(person_ids))
-    if not unique_ids:
+    unique: list[AbsencePersonItem] = []
+    seen: set[int] = set()
+    for item in specs:
+        if item.person_id in seen:
+            continue
+        seen.add(item.person_id)
+        unique.append(item)
+    if not unique:
         raise ValueError("Выберите людей из списка")
     taken = {e.person_id for e in entries if e.person_id}
-    if len(entries) + len(unique_ids) > total:
+    if len(entries) + len(unique) > total:
         raise ValueError(
-            f"Нельзя добавить: отсутствующих станет {len(entries) + len(unique_ids)}, по списку {total}"
+            f"Нельзя добавить: отсутствующих станет {len(entries) + len(unique)}, по списку {total}"
         )
     created: list[AbsenceEntry] = []
-    for person_id in unique_ids:
-        if person_id in taken:
+    for item in unique:
+        if item.person_id in taken:
             raise ValueError("Один из выбранных уже отмечен отсутствующим")
-        person = await session.get(Person, person_id)
+        person = await session.get(Person, item.person_id)
         if not person or person.unit_id != unit.id or not person.is_active:
             raise ValueError("Человек не найден в списке подразделения")
         entry = AbsenceEntry(
@@ -332,7 +442,8 @@ async def _add_absences_for_people(
             category_code=code,
             rank=format_rank(person.rank),
             last_name=display_last_name(person),
-            note=note,
+            note=(item.note or "").strip() or None,
+            hospital_id=item.hospital_id if _is_sick(code) else None,
         )
         session.add(entry)
         created.append(entry)
@@ -355,6 +466,42 @@ async def delete_absence_entry(
     if unit:
         return await mark_course_changed_if_submitted(session, unit, report_date)
     return False
+
+
+async def update_absence_entry(
+    session: AsyncSession,
+    entry_id: int,
+    unit_id: int,
+    report_date: date,
+    body: AbsenceEntryPatch,
+) -> tuple[AbsenceEntry, bool]:
+    entry = await session.get(AbsenceEntry, entry_id)
+    if not entry or entry.unit_id != unit_id:
+        raise ValueError("Запись не найдена")
+    if not _entry_visible_on_date(entry, report_date):
+        raise ValueError("Запись не найдена")
+    if _is_sick(entry.category_code):
+        if "hospital_id" in body.model_fields_set:
+            if body.hospital_id != entry.hospital_id:
+                entry.hospital_id = await _resolve_hospital_id(session, body.hospital_id)
+        elif not entry.hospital_id:
+            raise ValueError("Укажите мед. учреждение")
+        if "note" in body.model_fields_set:
+            entry.note = (body.note or "").strip() or None
+    else:
+        if "note" in body.model_fields_set:
+            detail = (body.note or "").strip()
+            code = _normalize_code(entry.category_code)
+            if code.value in DETAIL_REQUIRED_CODES and not detail:
+                raise ValueError("Укажите уточнение")
+            entry.note = detail or None
+    await session.flush()
+    await session.refresh(entry, attribute_names=["hospital"])
+    unit = await session.get(Unit, unit_id)
+    notify = False
+    if unit:
+        notify = await mark_course_changed_if_submitted(session, unit, report_date)
+    return entry, notify
 
 
 async def compute_aggregate_for_unit(
@@ -429,6 +576,8 @@ def _entries_to_reads(entries: list[AbsenceEntry], editable: bool) -> list[Absen
             rank=format_rank(e.rank or ""),
             last_name=e.last_name,
             note=e.note,
+            hospital_id=e.hospital_id,
+            hospital_name=e.hospital.name if e.hospital else None,
             editable=editable,
         )
         for e in entries

@@ -41,6 +41,7 @@ class AbsenceCategoryCode(str, enum.Enum):
     DISMISSAL = "dismissal"  # увольнение
     AWAY_DORM = "away_dorm"  # вне общежития
     OTHER = "other"
+    ARREST = "arrest"  # арест / гауптвахта
     # legacy (не используются в новом UI)
     SICK_MED = "sick_med"
     SICK_HOSP = "sick_hosp"
@@ -58,10 +59,11 @@ ABSENCE_CATEGORY_DEFS: list[tuple[str, str, bool]] = [
     ("duty", "Наряд", True),
     ("trip", "Командировка", False),
     ("leave", "Отпуск", False),
-    ("sick", "Болен", True),
+    ("sick", "Болен", False),
     ("dismissal", "Увольнение", False),
     ("away_dorm", "Вне общежития", False),
     ("other", "Прочее", False),
+    ("arrest", "Арест", False),
 ]
 
 DETAIL_REQUIRED_CODES = {c for c, _, req in ABSENCE_CATEGORY_DEFS if req}

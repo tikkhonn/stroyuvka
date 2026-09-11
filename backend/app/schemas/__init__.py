@@ -160,20 +160,51 @@ class AbsenceCategoryRead(ORMModel):
     reasons: list[AbsenceReasonRead] = []
 
 
+class HospitalCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    sort_order: int = 0
+
+
+class HospitalUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class HospitalRead(ORMModel):
+    id: int
+    name: str
+    sort_order: int
+    is_active: bool
+
+
+class AbsencePersonItem(BaseModel):
+    person_id: int
+    hospital_id: int | None = None
+    note: str | None = None
+
+
 class AbsenceEntryCreate(BaseModel):
     category_code: AbsenceCategoryCode
     rank: str = ""
     last_name: str = ""
     note: str | None = None
+    hospital_id: int | None = None
     person_ids: list[int] = Field(default_factory=list)
+    people: list[AbsencePersonItem] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def require_identity(self) -> "AbsenceEntryCreate":
-        if self.person_ids:
+        if self.people or self.person_ids:
             return self
         if not self.rank.strip() or not self.last_name.strip():
             raise ValueError("Укажите звание и фамилию или выберите людей из списка")
         return self
+
+
+class AbsenceEntryPatch(BaseModel):
+    hospital_id: int | None = None
+    note: str | None = None
 
 
 class AbsenceEntryRead(BaseModel):
@@ -185,6 +216,8 @@ class AbsenceEntryRead(BaseModel):
     rank: str
     last_name: str
     note: str | None = None
+    hospital_id: int | None = None
+    hospital_name: str | None = None
     editable: bool = True
 
 
@@ -198,6 +231,7 @@ class AttendanceAggregate(BaseModel):
     dismissal: int
     away_dorm: int
     other: int
+    arrest: int = 0
 
     @model_validator(mode="after")
     def validate_totals(self) -> "AttendanceAggregate":
@@ -209,6 +243,7 @@ class AttendanceAggregate(BaseModel):
             + self.dismissal
             + self.away_dorm
             + self.other
+            + self.arrest
         )
         if self.present != max(0, self.total_list - total_absent):
             raise ValueError(
@@ -340,6 +375,7 @@ class ChessboardRow(BaseModel):
     dismissal: int
     away_dorm: int
     other: int
+    arrest: int = 0
     status: ReportStatus
 
 
@@ -354,6 +390,8 @@ class ChessboardSickEntry(BaseModel):
     rank: str
     last_name: str
     note: str | None = None
+    hospital_id: int | None = None
+    hospital_name: str | None = None
     status_date: date
 
 
@@ -363,9 +401,16 @@ class ChessboardSickByLocation(BaseModel):
     count: int
 
 
+class ChessboardSickByHospital(BaseModel):
+    hospital_id: int | None = None
+    hospital_name: str
+    count: int
+
+
 class ChessboardSickSummary(BaseModel):
     total: int
     by_location: list[ChessboardSickByLocation]
+    by_hospital: list[ChessboardSickByHospital] = []
     officers_count: int = 0
     entries: list[ChessboardSickEntry]
 

@@ -20,6 +20,7 @@ from app.models import AbsenceCategory, AbsenceReason, CourseReport, FacultyRepo
 from app.schemas import (
     AbsenceCategoryRead,
     AbsenceEntryCreate,
+    AbsenceEntryPatch,
     AbsenceEntryRead,
     AbsenceReasonCreate,
     AbsenceReasonRead,
@@ -37,6 +38,7 @@ from app.services.attendance import (
     delete_absence_entry,
     ensure_schema_patches,
     get_attendance_snapshot,
+    update_absence_entry,
 )
 from app.services.audit import log_action
 from app.services.org import get_courses_for_faculty, get_faculty_for_unit
@@ -234,6 +236,8 @@ def _entry_read(entry, editable: bool = True) -> AbsenceEntryRead:
         rank=format_rank(entry.rank or ""),
         last_name=entry.last_name,
         note=entry.note,
+        hospital_id=entry.hospital_id,
+        hospital_name=entry.hospital.name if getattr(entry, "hospital", None) else None,
         editable=editable,
     )
 
@@ -351,6 +355,27 @@ async def create_absence(
         raise HTTPException(400, str(e)) from e
     await _notify_attendance(session, unit_id, report_date, notify_dpf=notify)
     return [_entry_read(entry) for entry in entries]
+
+
+@router.patch("/attendance/{unit_id}/absences/{entry_id}", response_model=AbsenceEntryRead)
+async def patch_absence(
+    unit_id: int,
+    entry_id: int,
+    body: AbsenceEntryPatch,
+    report_date: date = Query(default_factory=date.today),
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    await ensure_schema_patches(session)
+    await _require_writable_unit(session, user, unit_id, report_date)
+    try:
+        entry, notify = await update_absence_entry(
+            session, entry_id, unit_id, report_date, body
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    await _notify_attendance(session, unit_id, report_date, notify_dpf=notify)
+    return _entry_read(entry)
 
 
 @router.delete("/attendance/{unit_id}/absences/{entry_id}")

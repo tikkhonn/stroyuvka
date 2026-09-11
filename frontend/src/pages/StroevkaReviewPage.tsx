@@ -13,7 +13,7 @@ import { SummaryCards } from "../components/SummaryCards";
 import { StatusBadge } from "../components/StatusBadge";
 import { onWsEvent } from "../api/ws";
 import { formatAbsenceName } from "../constants/ranks";
-import { formatAbsenceCategory, absenceCategoryTextClass, absenceCategoryRowClass, categoryLabel } from "../constants/absenceCategories";
+import { formatAbsenceCategory, formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
 import { todayLocal } from "../utils/date";
 
 function formatDateRu(iso: string): string {
@@ -24,9 +24,12 @@ function formatDateRu(iso: string): string {
 }
 
 function absenceReasonLabel(row: AbsenceEntry): string {
-  const detail = row.note?.trim();
-  if (detail) return `${categoryLabel(row.category_code)} (${detail})`;
-  return categoryLabel(row.category_code);
+  return formatAbsenceReason(
+    row.category_code,
+    row.status_date,
+    row.note,
+    row.hospital_name
+  );
 }
 
 function emptyAggregate(): AttendanceAggregate {
@@ -40,6 +43,7 @@ function emptyAggregate(): AttendanceAggregate {
     dismissal: 0,
     away_dorm: 0,
     other: 0,
+    arrest: 0,
   };
 }
 
@@ -53,7 +57,8 @@ function sumAggregates(parts: AttendanceAggregate[]): AttendanceAggregate {
   const dismissal = parts.reduce((sum, part) => sum + part.dismissal, 0);
   const away_dorm = parts.reduce((sum, part) => sum + part.away_dorm, 0);
   const other = parts.reduce((sum, part) => sum + part.other, 0);
-  const totalAbsent = duty + trip + leave + sick + dismissal + away_dorm + other;
+  const arrest = parts.reduce((sum, part) => sum + part.arrest, 0);
+  const totalAbsent = duty + trip + leave + sick + dismissal + away_dorm + other + arrest;
   return {
     total_list,
     present: Math.max(0, total_list - totalAbsent),
@@ -64,6 +69,7 @@ function sumAggregates(parts: AttendanceAggregate[]): AttendanceAggregate {
     dismissal,
     away_dorm,
     other,
+    arrest,
   };
 }
 

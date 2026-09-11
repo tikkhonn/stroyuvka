@@ -4,19 +4,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import AbsenceCategoryCode, ReportStatus, UnitType
-from app.models import CourseReport, FacultyReport, OfficerReport, Unit
+from app.models import AbsenceEntry, CourseReport, FacultyReport, OfficerReport, Unit
 from app.schemas import (
     AttendanceAggregate,
     ChessboardResponse,
     ChessboardRow,
+    ChessboardSickByHospital,
     ChessboardSickByLocation,
     ChessboardSickEntry,
     ChessboardSickSummary,
 )
 from app.services.attendance import (
+    assert_unit_sick_have_hospitals,
     compute_academy_aggregate,
     compute_aggregate_for_unit,
     list_absence_entries,
+    sick_without_hospital_message,
     sum_aggregates,
     _normalize_code,
 )
@@ -95,6 +98,8 @@ async def submit_course_report(
     except Exception as e:
         raise ValueError(f"Строевка не сходится: {e}") from e
 
+    await assert_unit_sick_have_hospitals(session, course_id, report_date)
+
     result = await session.execute(
         select(CourseReport).where(
             CourseReport.course_id == course_id,
@@ -158,7 +163,8 @@ async def faculty_submit_blockers(
     session: AsyncSession, faculty_id: int, report_date: date
 ) -> list[str]:
     blockers: list[str] = []
-    for course in await get_courses_for_faculty(session, faculty_id):
+    courses = await get_courses_for_faculty(session, faculty_id)
+    for course in courses:
         result = await session.execute(
             select(CourseReport).where(
                 CourseReport.course_id == course.id,
@@ -168,6 +174,12 @@ async def faculty_submit_blockers(
         cr = result.scalar_one_or_none()
         if not cr or cr.status not in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
             blockers.append(f"{course.name} не отправил строевую записку")
+        hospital_msg = await sick_without_hospital_message(session, course.id, report_date)
+        if hospital_msg:
+            blockers.append(f"{course.name}: {hospital_msg}")
+    hospital_msg = await sick_without_hospital_message(session, faculty_id, report_date)
+    if hospital_msg:
+        blockers.append(f"Офицеры: {hospital_msg}")
     return blockers
 
 
@@ -190,7 +202,11 @@ async def submit_faculty_report(
     if blockers:
         raise ValueError(blockers[0])
 
+    await assert_unit_sick_have_hospitals(session, faculty_id, report_date)
     courses = await get_courses_for_faculty(session, faculty_id)
+    for course in courses:
+        await assert_unit_sick_have_hospitals(session, course.id, report_date)
+
     for course in courses:
         result = await session.execute(
             select(CourseReport).where(
@@ -285,6 +301,7 @@ def _row_from_agg(
         dismissal=agg.dismissal,
         away_dorm=agg.away_dorm,
         other=agg.other,
+        arrest=agg.arrest,
         status=status,
     )
 
@@ -543,6 +560,12 @@ async def build_chessboard_location(
     return rows
 
 
+def _sick_hospital_name(entry: AbsenceEntry) -> str:
+    if entry.hospital:
+        return entry.hospital.name
+    return "Не указано"
+
+
 async def build_chessboard_sick_summary(
     session: AsyncSession, report_date: date
 ) -> ChessboardSickSummary:
@@ -598,6 +621,8 @@ async def build_chessboard_sick_summary(
                     rank=format_rank(entry.rank or ""),
                     last_name=entry.last_name,
                     note=entry.note,
+                    hospital_id=entry.hospital_id,
+                    hospital_name=_sick_hospital_name(entry),
                     status_date=entry.status_date,
                 )
             )
@@ -620,6 +645,8 @@ async def build_chessboard_sick_summary(
                     rank=format_rank(entry.rank or ""),
                     last_name=entry.last_name,
                     note=entry.note,
+                    hospital_id=entry.hospital_id,
+                    hospital_name=_sick_hospital_name(entry),
                     status_date=entry.status_date,
                 )
             )
@@ -644,9 +671,26 @@ async def build_chessboard_sick_summary(
         for loc_id in sorted(LOCATION_NAMES)
     ]
 
+    hospital_counts: dict[tuple[int | None, str], int] = {}
+    for row in entries:
+        key = (row.hospital_id, row.hospital_name or "Не указано")
+        hospital_counts[key] = hospital_counts.get(key, 0) + 1
+    by_hospital = [
+        ChessboardSickByHospital(
+            hospital_id=hospital_id,
+            hospital_name=name,
+            count=count,
+        )
+        for (hospital_id, name), count in sorted(
+            hospital_counts.items(),
+            key=lambda item: (item[0][0] is None, (item[0][1] or "").lower()),
+        )
+    ]
+
     return ChessboardSickSummary(
         total=len(entries),
         by_location=by_location,
+        by_hospital=by_hospital,
         officers_count=officers_count,
         entries=entries,
     )

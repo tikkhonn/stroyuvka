@@ -5,6 +5,7 @@ import {
   AbsenceEntry,
   AttendanceSnapshot,
   AttendanceUnitOption,
+  Hospital,
   PersonRead,
   api,
 } from "../api/client";
@@ -13,8 +14,14 @@ import { SummaryCards } from "../components/SummaryCards";
 import { StatusBadge } from "../components/StatusBadge";
 import { RosterSection } from "../components/RosterSection";
 import { RosterPersonCombobox } from "../components/RosterPersonCombobox";
+import { HospitalSelect } from "../components/HospitalSelect";
 import { onWsEvent } from "../api/ws";
-import { ABSENCE_CATEGORY_OPTIONS, formatAbsenceReason, absenceCategoryRowClass } from "../constants/absenceCategories";
+import {
+  ABSENCE_CATEGORY_OPTIONS,
+  formatAbsenceReason,
+  absenceCategoryRowClass,
+  isSickCategory,
+} from "../constants/absenceCategories";
 import { todayLocal } from "../utils/date";
 import { formatRank } from "../constants/ranks";
 
@@ -38,6 +45,8 @@ export function AttendancePage() {
   const [newCategory, setNewCategory] = useState("duty");
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [newDetail, setNewDetail] = useState("");
+  const [newHospitalId, setNewHospitalId] = useState<number | null>(null);
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -85,14 +94,16 @@ export function AttendancePage() {
     if (!background) setLoading(true);
     setMessage("");
     try {
-      const [snap, cats, roster] = await Promise.all([
+      const [snap, cats, roster, hospitalList] = await Promise.all([
         api<AttendanceSnapshot>(`/api/attendance/${unitId}?report_date=${reportDate}`),
         api<AbsenceCategoryOption[]>("/api/absence-categories").catch(() => FALLBACK),
         api<PersonRead[]>(`/api/attendance/${unitId}/people?report_date=${reportDate}`),
+        api<Hospital[]>("/api/hospitals?active_only=true").catch(() => [] as Hospital[]),
       ]);
       setSnapshot(snap);
       setCategories(cats.length ? cats : FALLBACK);
       setPeople(roster);
+      setHospitals(hospitalList);
       hasLoadedRef.current = true;
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Ошибка загрузки");
@@ -149,14 +160,20 @@ export function AttendancePage() {
     }
   }, [snapshot?.editable]);
 
+  const addingSick = isSickCategory(newCategory);
+
   const addAbsence = async (e: FormEvent) => {
     e.preventDefault();
     if (!unitId || selectedPersonId === null) {
       setMessage("Выберите человека из списка подразделения");
       return;
     }
+    if (addingSick && !newHospitalId) {
+      setMessage("Укажите мед. учреждение");
+      return;
+    }
     if (detailRequired && !newDetail.trim()) {
-      setMessage("Укажите уточнение (вид наряда / где болен)");
+      setMessage("Укажите уточнение (вид наряда)");
       return;
     }
     setSaving(true);
@@ -167,11 +184,13 @@ export function AttendancePage() {
         body: JSON.stringify({
           category_code: newCategory,
           person_ids: [selectedPersonId],
+          hospital_id: addingSick ? newHospitalId : null,
           note: newDetail.trim() || null,
         }),
       });
       setSelectedPersonId(null);
       setNewDetail("");
+      setNewHospitalId(null);
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Ошибка");
@@ -187,6 +206,26 @@ export function AttendancePage() {
     try {
       await api(`/api/attendance/${unitId}/absences/${entryId}?report_date=${reportDate}`, {
         method: "DELETE",
+      });
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const patchAbsence = async (
+    entryId: number,
+    body: { hospital_id?: number | null; note?: string | null }
+  ) => {
+    if (!unitId) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      await api(`/api/attendance/${unitId}/absences/${entryId}?report_date=${reportDate}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
       });
       await load();
     } catch (err) {
@@ -231,7 +270,11 @@ export function AttendancePage() {
   };
 
   const reasonForAbsence = (row: AbsenceEntry) =>
-    formatAbsenceReason(row.category_code, row.status_date, row.note);
+    formatAbsenceReason(row.category_code, row.status_date, row.note, row.hospital_name);
+
+  const sickMissingHospital = (snapshot?.absences ?? []).some(
+    (row) => isSickCategory(row.category_code) && !row.hospital_id
+  );
 
   if (!unitId && !loading && units.length === 0) {
     return (
@@ -301,6 +344,7 @@ export function AttendancePage() {
             absenceByPersonId={absenceByPersonId}
             editable={editable}
             categories={categories}
+            hospitals={hospitals}
             saving={saving}
             onReload={load}
             onMessage={setMessage}
@@ -362,17 +406,40 @@ export function AttendancePage() {
                         disabled={saving}
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Уточнение {detailRequired ? "(обязательно)" : "(необяз.)"}
-                      </label>
-                      <input
-                        value={newDetail}
-                        onChange={(e) => setNewDetail(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                        required={detailRequired}
-                      />
-                    </div>
+                    {addingSick ? (
+                      <>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Мед. учреждение</label>
+                          <HospitalSelect
+                            hospitals={hospitals}
+                            value={newHospitalId}
+                            onChange={setNewHospitalId}
+                            required
+                            disabled={saving}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Диагноз (необяз.)</label>
+                          <input
+                            value={newDetail}
+                            onChange={(e) => setNewDetail(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Уточнение {detailRequired ? "(обязательно)" : "(необяз.)"}
+                        </label>
+                        <input
+                          value={newDetail}
+                          onChange={(e) => setNewDetail(e.target.value)}
+                          className="border rounded px-2 py-1 text-sm"
+                          required={detailRequired}
+                        />
+                      </div>
+                    )}
                     <button
                       type="submit"
                       disabled={saving || selectedPersonId === null}
@@ -390,21 +457,29 @@ export function AttendancePage() {
                       <th>Звание</th>
                       <th>Причина отсутствия</th>
                       <th>ФИО</th>
-                      {editable && absencesEditing && <th></th>}
+                      {editable && absencesEditing && (
+                        <>
+                          <th>Мед. учреждение</th>
+                          <th>Диагноз</th>
+                          <th></th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {snapshot.absences.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={editable && absencesEditing ? 5 : 4}
+                          colSpan={editable && absencesEditing ? 7 : 4}
                           className="text-gray-500 text-sm"
                         >
                           Нет отсутствующих — все налицо
                         </td>
                       </tr>
                     ) : (
-                      snapshot.absences.map((row, i) => (
+                      snapshot.absences.map((row, i) => {
+                        const sick = isSickCategory(row.category_code);
+                        return (
                         <tr
                           key={row.id}
                           className={absenceCategoryRowClass(row.category_code)}
@@ -414,20 +489,67 @@ export function AttendancePage() {
                           <td>{reasonForAbsence(row)}</td>
                           <td>{row.last_name}</td>
                           {editable && absencesEditing && (
-                            <td>
-                              {row.editable && (
-                                <button
-                                  type="button"
-                                  onClick={() => void removeAbsence(row.id)}
-                                  className="text-xs text-red-600 hover:underline"
-                                >
-                                  Удалить
-                                </button>
-                              )}
-                            </td>
+                            <>
+                              <td>
+                                {sick && row.editable ? (
+                                  <HospitalSelect
+                                    hospitals={hospitals}
+                                    value={row.hospital_id ?? null}
+                                    extra={
+                                      row.hospital_id
+                                        ? {
+                                            id: row.hospital_id,
+                                            name: row.hospital_name || "Не указано",
+                                          }
+                                        : null
+                                    }
+                                    required
+                                    disabled={saving}
+                                    onChange={(hospital_id) => {
+                                      if (hospital_id) {
+                                        void patchAbsence(row.id, { hospital_id });
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td>
+                                {sick && row.editable ? (
+                                  <input
+                                    key={`${row.id}-${row.note ?? ""}`}
+                                    defaultValue={row.note ?? ""}
+                                    onBlur={(e) => {
+                                      const next = e.target.value.trim() || null;
+                                      if (next !== (row.note?.trim() || null)) {
+                                        void patchAbsence(row.id, { note: next });
+                                      }
+                                    }}
+                                    className="border rounded px-2 py-1 text-sm w-full"
+                                    placeholder="необяз."
+                                    disabled={saving}
+                                  />
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td>
+                                {row.editable && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void removeAbsence(row.id)}
+                                    className="text-xs text-red-600 hover:underline"
+                                  >
+                                    Удалить
+                                  </button>
+                                )}
+                              </td>
+                            </>
                           )}
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -436,10 +558,16 @@ export function AttendancePage() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2 no-print">
+            {sickMissingHospital && (
+              <p className="w-full text-sm text-red-800 bg-red-50 px-3 py-2 rounded">
+                Укажите мед. учреждение у всех больных, иначе строевку нельзя отправить.
+              </p>
+            )}
             {canSubmitCourse && (!isSubmitted || snapshot.report_status === "draft") && (
               <button
                 onClick={() => void submitReport()}
-                className="bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light"
+                disabled={sickMissingHospital}
+                className="bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light disabled:opacity-50"
               >
                 Отправить строевку
               </button>
@@ -464,7 +592,8 @@ export function AttendancePage() {
                 </p>
                 <button
                   onClick={() => void submitReport()}
-                  className="bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light"
+                  disabled={sickMissingHospital}
+                  className="bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light disabled:opacity-50"
                 >
                   Отправить строевку
                 </button>

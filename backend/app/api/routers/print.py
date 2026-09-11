@@ -1,7 +1,8 @@
 from datetime import date
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ABSENCE_CATEGORY_DEFS, DutyPostType, UnitType
@@ -9,11 +10,21 @@ from app.db.session import get_db
 from app.dependencies import assert_unit_access, get_current_user
 from app.models import Unit
 from app.schemas import AuthUser
+from app.services.attendance import ensure_schema_patches
+from app.services.print_sick_xlsx import build_sick_xlsx
 from app.services.print_stroevka import build_stroevka_print
 
 router = APIRouter(prefix="/print", tags=["print"])
 
 _VALID_CATEGORY_CODES = {code for code, _label, _req in ABSENCE_CATEGORY_DEFS}
+
+
+def _can_print_academy(user: AuthUser) -> bool:
+    return (
+        user.shell == "admin"
+        or user.post_type == DutyPostType.DPA.value
+        or user.role == "dpa"
+    )
 
 
 @router.get("/stroevaya", response_class=HTMLResponse)
@@ -42,21 +53,13 @@ async def stroevaya(
         unit_id = user.unit_id
 
     if category_code:
-        if not (
-            user.shell == "admin"
-            or user.post_type == DutyPostType.DPA.value
-            or user.role == "dpa"
-        ):
+        if not _can_print_academy(user):
             raise HTTPException(403, "Отчёт по причине отсутствия доступен только ДПА")
         if scope == "unit":
             raise HTTPException(400, "Для отчёта по причине выберите академию, расположение или факультет")
 
     if scope == "academy":
-        if not (
-            user.shell == "admin"
-            or user.post_type == DutyPostType.DPA.value
-            or user.role == "dpa"
-        ):
+        if not _can_print_academy(user):
             raise HTTPException(403, "Нет доступа к сводке всей академии")
     elif unit_id is None:
         raise HTTPException(400, "Укажите unit_id")
@@ -79,3 +82,21 @@ async def stroevaya(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     return HTMLResponse(html)
+
+
+@router.get("/sick.xlsx")
+async def sick_xlsx(
+    report_date: date = Query(default_factory=date.today),
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    if not _can_print_academy(user):
+        raise HTTPException(403, "Выгрузка расхода доступна только ДПА")
+    await ensure_schema_patches(session)
+    data = await build_sick_xlsx(session, report_date)
+    filename = quote(f"Расход {report_date.strftime('%d.%m.%Y')}.xlsx")
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )

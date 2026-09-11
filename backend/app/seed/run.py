@@ -11,6 +11,7 @@ from app.models import (
     AbsenceCategory,
     AbsenceReason,
     DutyPost,
+    Hospital,
     Unit,
     User,
 )
@@ -34,6 +35,7 @@ CATEGORIES = [
     (AbsenceCategoryCode.DISMISSAL, "Увольнение", 5),
     (AbsenceCategoryCode.AWAY_DORM, "Вне общежития", 6),
     (AbsenceCategoryCode.OTHER, "Прочее", 7),
+    (AbsenceCategoryCode.ARREST, "Арест", 8),
 ]
 
 REASONS_BY_CODE = {
@@ -68,6 +70,10 @@ async def seed_if_empty() -> None:
             cat = cat_map[code]
             for name in names:
                 session.add(AbsenceReason(category_id=cat.id, name=name))
+        await session.flush()
+
+        session.add(Hospital(name="Медпункт", sort_order=0, is_active=True))
+        session.add(Hospital(name="Госпиталь", sort_order=1, is_active=True))
         await session.flush()
 
         session.add(

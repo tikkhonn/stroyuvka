@@ -39,6 +39,7 @@ const NAV_DPK = [
 const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
   admin: [
     { to: "/admin/units", label: "ОШС" },
+    { to: "/admin/hospitals", label: "Мед. учреждения" },
     { to: "/attendance", label: "Расход" },
     { to: "/admin/duty-contacts", label: "Дежурные" },
     { to: "/audit", label: "Журнал" },

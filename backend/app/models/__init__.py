@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import (
@@ -140,6 +140,19 @@ class PersonDayStatus(Base):
     reason: Mapped[Optional["AbsenceReason"]] = relationship("AbsenceReason")
 
 
+class Hospital(Base):
+    __tablename__ = "hospitals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    absences: Mapped[list["AbsenceEntry"]] = relationship(
+        "AbsenceEntry", back_populates="hospital"
+    )
+
+
 class UnitStrength(Base):
     """Численность «по списку» для курса или факультета (офицеры). Помнится между днями."""
 
@@ -167,12 +180,18 @@ class AbsenceEntry(Base):
     rank: Mapped[str] = mapped_column(String(64), default="")
     last_name: Mapped[str] = mapped_column(String(128))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hospital_id: Mapped[int | None] = mapped_column(
+        ForeignKey("hospitals.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
     person: Mapped[Optional["Person"]] = relationship(
         "Person", back_populates="absences"
+    )
+    hospital: Mapped[Optional["Hospital"]] = relationship(
+        "Hospital", back_populates="absences"
     )
 
 

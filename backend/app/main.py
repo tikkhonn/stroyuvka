@@ -10,6 +10,7 @@ from app.api.routers import (
     chat,
     documentation,
     duty_posts,
+    hospitals,
     landline_phones,
     print as print_router,
     reports,
@@ -66,6 +67,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(units.router, prefix="/api")
 app.include_router(attendance.router, prefix="/api")
+app.include_router(hospitals.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(documentation.router, prefix="/api")

@@ -1,42 +1,22 @@
 import { useEffect, useState } from "react";
 import {
-  AttendanceAggregate,
   OverviewResponse,
   OverviewUnitBreakdown,
   api,
 } from "../api/client";
 import { onWsEvent } from "../api/ws";
-import { formatAbsenceName } from "../constants/ranks";
-import {
-  ABSENCE_CATEGORY_TEXT_CLASS,
-  AGGREGATE_NEUTRAL_TEXT_CLASS,
-  absenceCategoryTextClass,
-} from "../constants/absenceCategories";
+import { ABSENCE_CATEGORY_TEXT_CLASS } from "../constants/absenceCategories";
 import { Card, CardHeader } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
-import { StatCard } from "../components/ui/StatCard";
+import { SummaryCards } from "../components/SummaryCards";
 import { todayLocal } from "../utils/date";
-
-const KEY_METRICS: {
-  key: keyof AttendanceAggregate;
-  label: string;
-  deltaKey?: keyof NonNullable<OverviewResponse["delta_vs_yesterday"]>;
-  valueClassName: string;
-}[] = [
-  { key: "total_list", label: "По списку", valueClassName: AGGREGATE_NEUTRAL_TEXT_CLASS },
-  { key: "present", label: "В строю", deltaKey: "present", valueClassName: AGGREGATE_NEUTRAL_TEXT_CLASS },
-  { key: "sick", label: "Больные", deltaKey: "sick", valueClassName: ABSENCE_CATEGORY_TEXT_CLASS.sick },
-  { key: "trip", label: "Командировка", deltaKey: "trip", valueClassName: ABSENCE_CATEGORY_TEXT_CLASS.trip },
-  { key: "leave", label: "Отпуск", deltaKey: "leave", valueClassName: ABSENCE_CATEGORY_TEXT_CLASS.leave },
-  { key: "dismissal", label: "Увольнение", deltaKey: "dismissal", valueClassName: ABSENCE_CATEGORY_TEXT_CLASS.dismissal },
-];
 
 function DeltaBadge({ value }: { value: number }) {
   if (value === 0) return null;
   const up = value > 0;
   return (
     <span
-      className={`text-xs font-medium ${up ? "text-rose-600" : "text-emerald-600"}`}
+      className={`text-xs font-medium ${up ? "text-rose-200" : "text-emerald-200"}`}
       title="Изменение к вчера"
     >
       {up ? "+" : ""}
@@ -44,6 +24,7 @@ function DeltaBadge({ value }: { value: number }) {
     </span>
   );
 }
+
 
 function BreakdownRow({ row }: { row: OverviewUnitBreakdown }) {
   const { aggregate: a } = row;
@@ -83,6 +64,9 @@ function BreakdownRow({ row }: { row: OverviewUnitBreakdown }) {
         )}
         {a.other > 0 && (
           <span className={ABSENCE_CATEGORY_TEXT_CLASS.other}>прочее {a.other}</span>
+        )}
+        {a.arrest > 0 && (
+          <span className={ABSENCE_CATEGORY_TEXT_CLASS.arrest}>арест {a.arrest}</span>
         )}
       </div>
     </div>
@@ -163,26 +147,31 @@ export function ChiefOverviewPage() {
         <p className="text-gray-500">Нет данных</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-            {KEY_METRICS.map(({ key, label, deltaKey, valueClassName }) => (
-              <StatCard
-                key={key}
-                label={label}
-                value={data.academy[key]}
-                valueClassName={valueClassName}
-                hint={
-                  <>
-                    {deltaKey && data.delta_vs_yesterday && (
-                      <DeltaBadge value={data.delta_vs_yesterday[deltaKey]} />
-                    )}
-                    {key === "present" && (
-                      <p className="text-xs text-gray-500">{data.present_percent}% от списка</p>
-                    )}
-                  </>
-                }
-              />
-            ))}
-          </div>
+          <SummaryCards
+            agg={data.academy}
+            hints={{
+              present: (
+                <>
+                  {data.delta_vs_yesterday ? (
+                    <DeltaBadge value={data.delta_vs_yesterday.present} />
+                  ) : null}
+                  <p className="text-[10px] text-white/80">{data.present_percent}% от списка</p>
+                </>
+              ),
+              sick: data.delta_vs_yesterday ? (
+                <DeltaBadge value={data.delta_vs_yesterday.sick} />
+              ) : null,
+              trip: data.delta_vs_yesterday ? (
+                <DeltaBadge value={data.delta_vs_yesterday.trip} />
+              ) : null,
+              leave: data.delta_vs_yesterday ? (
+                <DeltaBadge value={data.delta_vs_yesterday.leave} />
+              ) : null,
+              dismissal: data.delta_vs_yesterday ? (
+                <DeltaBadge value={data.delta_vs_yesterday.dismissal} />
+              ) : null,
+            }}
+          />
 
           {readiness && (
             <Card className="mb-8">
@@ -250,40 +239,25 @@ export function ChiefOverviewPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-gray-500 border-b bg-gray-50/80">
-                      <th className="py-2.5 px-3 font-medium">ФИО</th>
-                      <th className="py-2.5 px-3 font-medium">Подразделение</th>
-                      <th className="py-2.5 px-3 font-medium">С даты</th>
-                      <th className="py-2.5 px-3 font-medium">Примечание</th>
+                      <th className="py-2.5 px-3 font-medium">Мед. учреждение</th>
+                      <th className="py-2.5 px-3 font-medium text-right">Человек</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.sick_summary.entries.slice(0, 15).map((e) => (
-                      <tr key={e.id} className="border-b border-gray-50 last:border-0 hover:bg-vka-cream/50">
-                        <td className={`py-2.5 px-3 font-medium ${absenceCategoryTextClass("sick")}`}>
-                          {formatAbsenceName({
-                            rank: e.rank,
-                            last_name: e.last_name,
-                            note: e.note,
-                          })}
+                    {(data.sick_summary.by_hospital ?? []).map((row) => (
+                      <tr
+                        key={`${row.hospital_id ?? "none"}-${row.hospital_name}`}
+                        className="border-b border-gray-50 last:border-0"
+                      >
+                        <td className="py-2.5 px-3">{row.hospital_name}</td>
+                        <td className={`py-2.5 px-3 text-right font-medium ${ABSENCE_CATEGORY_TEXT_CLASS.sick}`}>
+                          {row.count}
                         </td>
-                        <td className="py-2.5 px-3 text-gray-600">
-                          {e.unit_name}
-                          {e.faculty_name && e.faculty_name !== e.unit_name && (
-                            <span className="block text-xs">{e.faculty_name}</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">{e.status_date}</td>
-                        <td className="py-2.5 px-3 text-gray-500">{e.note || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {data.sick_summary.total > 15 && (
-                <p className="text-xs text-gray-500 mt-3">
-                  Показаны первые 15 из {data.sick_summary.total}
-                </p>
-              )}
             </Card>
           )}
         </>
