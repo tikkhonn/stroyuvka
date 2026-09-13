@@ -64,5 +64,3 @@ export function getHelpContent(role: string, shell: string): HelpContent {
       };
   }
 }
-
-export type { HelpContent, HelpStep, HelpSection, GlossaryItem, FaqItem } from "./types";

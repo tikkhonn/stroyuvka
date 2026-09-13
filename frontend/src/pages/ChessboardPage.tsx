@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChessboardResponse, ChessboardRow, ChessboardSickByHospital, ChessboardSickEntry, ChessboardSickSummary, api } from "../api/client";
-import { todayLocal } from "../utils/date";
+import { formatDateRu, todayLocal } from "../utils/date";
 import { ReportPipelineBar } from "../components/ReportPipelineBar";
 import { aggregateCellClass } from "../components/SummaryCards";
 import { formatAbsenceName } from "../constants/ranks";
@@ -128,12 +128,6 @@ function countCourses(rows: ChessboardRow[]): number {
 
 function academyTotalRow(rows: ChessboardRow[]): ChessboardRow | null {
   return rows.find((r) => r.row_kind === "academy_total") ?? null;
-}
-
-function formatDateRu(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}.${m}.${y}`;
 }
 
 function hospitalBuckets(entries: ChessboardSickEntry[]): ChessboardSickByHospital[] {
@@ -428,7 +422,9 @@ export function ChessboardPage() {
                   }`}
                 >
                   <div className="text-xs uppercase tracking-wide opacity-80">Все</div>
-                  <div className="font-semibold">3 расположения</div>
+                  <div className="font-semibold">
+                    {KNOWN_LOCATIONS.length} расположения
+                  </div>
                 </button>
                 {locationSections.map((section) => {
                   const active = panelFilter === section.locationId;

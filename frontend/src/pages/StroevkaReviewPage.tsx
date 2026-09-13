@@ -17,14 +17,7 @@ import { DutyLandlinePlaque } from "../components/DutyLandlinePlaque";
 import { onWsEvent } from "../api/ws";
 import { formatAbsenceName } from "../constants/ranks";
 import { formatAbsenceCategory, formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
-import { todayLocal } from "../utils/date";
-
-function formatDateRu(iso: string): string {
-  const d = iso.slice(0, 10);
-  const [y, m, day] = d.split("-");
-  if (y && m && day) return `${day}.${m}.${y}`;
-  return iso;
-}
+import { formatDateRu, todayLocal } from "../utils/date";
 
 function absenceReasonLabel(row: AbsenceEntry): string {
   return formatAbsenceReason(

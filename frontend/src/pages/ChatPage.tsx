@@ -82,9 +82,13 @@ function AttachmentImage({ att }: { att: ChatAttachment }) {
     let objectUrl: string | null = null;
     void fetchChatAttachmentBlob(att.id)
       .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
+        const url = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url;
+        setSrc(url);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);

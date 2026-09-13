@@ -334,11 +334,6 @@ async def get_attendance(
         raise HTTPException(400, str(e)) from e
 
 
-@router.put("/attendance/{unit_id}/strength")
-async def put_strength(unit_id: int, user: AuthUser = Depends(get_current_user)):
-    raise HTTPException(400, "Численность «по списку» считается по числу людей в базе")
-
-
 @router.post("/attendance/{unit_id}/absences", response_model=list[AbsenceEntryRead])
 async def create_absence(
     unit_id: int,

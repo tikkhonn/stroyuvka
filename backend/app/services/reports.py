@@ -117,9 +117,6 @@ async def submit_course_report(
             raise ValueError("Нажмите «Редактировать строевую записку» для внесения правок")
         report.is_editing = False
         report.changes_pending_dpf = True
-    else:
-        if report.status == ReportStatus.SUBMITTED:
-            raise ValueError("Строевая записка уже отправлена")
 
     report.status = ReportStatus.SUBMITTED
     report.submitted_at = datetime.now(UTC)
@@ -299,13 +296,6 @@ async def _course_report(
         )
     )
     return cr_result.scalar_one_or_none()
-
-
-async def _course_status(
-    session: AsyncSession, course_id: int, report_date: date
-) -> ReportStatus:
-    cr = await _course_report(session, course_id, report_date)
-    return cr.status if cr else ReportStatus.DRAFT
 
 
 async def ack_course_changes_dpf(
