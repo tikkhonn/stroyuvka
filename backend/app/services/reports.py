@@ -77,7 +77,7 @@ async def start_course_editing(
     )
     report = result.scalar_one_or_none()
     if not report or report.status not in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
-        raise ValueError("Сначала отправьте строевку")
+        raise ValueError("Сначала отправьте строевую записку")
     report.is_editing = True
     await session.flush()
     return report
@@ -96,7 +96,7 @@ async def submit_course_report(
         aggregate = await compute_aggregate_for_unit(session, course_id, report_date)
         AttendanceAggregate.model_validate(aggregate.model_dump())
     except Exception as e:
-        raise ValueError(f"Строевка не сходится: {e}") from e
+        raise ValueError(f"Строевая записка не сходится: {e}") from e
 
     await assert_unit_sick_have_hospitals(session, course_id, report_date)
 
@@ -114,12 +114,12 @@ async def submit_course_report(
     is_resubmit = report.status in (ReportStatus.SUBMITTED, ReportStatus.APPROVED)
     if is_resubmit:
         if not report.is_editing:
-            raise ValueError("Нажмите «Редактировать строевку» для внесения правок")
+            raise ValueError("Нажмите «Редактировать строевую записку» для внесения правок")
         report.is_editing = False
         report.changes_pending_dpf = True
     else:
         if report.status == ReportStatus.SUBMITTED:
-            raise ValueError("Строевка уже отправлена")
+            raise ValueError("Строевая записка уже отправлена")
 
     report.status = ReportStatus.SUBMITTED
     report.submitted_at = datetime.now(UTC)
@@ -139,7 +139,7 @@ async def reject_course_report(
     )
     report = result.scalar_one_or_none()
     if not report:
-        raise ValueError("Строевка не найдена")
+        raise ValueError("Строевая записка не найдена")
     report.status = ReportStatus.DRAFT
     report.is_editing = False
     report.reject_comment = comment
@@ -188,7 +188,7 @@ async def start_faculty_editing(
 ) -> FacultyReport:
     faculty_report = await _get_or_create_faculty_report(session, faculty_id, report_date)
     if faculty_report.status not in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
-        raise ValueError("Сначала отправьте строевку факультета")
+        raise ValueError("Сначала отправьте строевую записку факультета")
     faculty_report.is_editing = True
     await session.flush()
     return faculty_report
@@ -207,23 +207,6 @@ async def submit_faculty_report(
     for course in courses:
         await assert_unit_sick_have_hospitals(session, course.id, report_date)
 
-    for course in courses:
-        result = await session.execute(
-            select(CourseReport).where(
-                CourseReport.course_id == course.id,
-                CourseReport.report_date == report_date,
-            )
-        )
-        cr = result.scalar_one_or_none()
-        if not cr or cr.status not in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
-            raise ValueError(f"{course.name} не отправил строевую записку")
-
-    officer_agg = await compute_aggregate_for_unit(
-        session,
-        faculty_id,
-        report_date,
-    )
-
     officer_report = await _get_or_create_officer_report(session, faculty_id, report_date)
     officer_report.status = ReportStatus.SUBMITTED
 
@@ -231,11 +214,11 @@ async def submit_faculty_report(
     is_resubmit = faculty_report.status in (ReportStatus.SUBMITTED, ReportStatus.APPROVED)
     if is_resubmit:
         if not faculty_report.is_editing:
-            raise ValueError("Нажмите «Редактировать строевку» для внесения правок")
+            raise ValueError("Нажмите «Редактировать строевую записку» для внесения правок")
         faculty_report.is_editing = False
     else:
         if faculty_report.status == ReportStatus.SUBMITTED:
-            raise ValueError("Строевка факультета уже отправлена")
+            raise ValueError("Строевая записка факультета уже отправлена")
 
     faculty_report.status = ReportStatus.APPROVED
     faculty_report.approved_at = datetime.now(UTC)
@@ -335,7 +318,7 @@ async def ack_course_changes_dpf(
         raise ValueError("Курс не принадлежит вашему факультету")
     report = await _course_report(session, course_id, report_date)
     if not report:
-        raise ValueError("Строевка не найдена")
+        raise ValueError("Строевая записка не найдена")
     if not report.changes_pending_dpf:
         raise ValueError("Нет ожидающих подтверждения изменений")
     report.changes_pending_dpf = False
@@ -349,7 +332,7 @@ async def ack_course_changes_dpa(
 ) -> CourseReport:
     report = await _course_report(session, course_id, report_date)
     if not report:
-        raise ValueError("Строевка не найдена")
+        raise ValueError("Строевая записка не найдена")
     if not report.changes_pending_dpa:
         raise ValueError("Нет ожидающих подтверждения изменений")
     report.changes_pending_dpa = False
@@ -401,6 +384,9 @@ async def build_faculty_stroevka_bundle(
         has_pending_for_dpf=has_dpf,
         has_pending_for_dpa=has_dpa,
         faculty_report_status=faculty_report.status if faculty_report else None,
+        faculty_report_submitted_at=(
+            faculty_report.approved_at if faculty_report else None
+        ),
         is_editing=bool(faculty_report.is_editing) if faculty_report else False,
         submit_blockers=submit_blockers,
     )
@@ -436,6 +422,39 @@ async def build_chessboard_faculty(
     rows: list[ChessboardRow] = []
 
     for faculty in sorted(faculties, key=lambda f: f.id):
+        officer_agg = await compute_aggregate_for_unit(session, faculty.id, report_date)
+        fr_result = await session.execute(
+            select(FacultyReport).where(
+                FacultyReport.faculty_id == faculty.id,
+                FacultyReport.report_date == report_date,
+            )
+        )
+        fr = fr_result.scalar_one_or_none()
+        or_result = await session.execute(
+            select(OfficerReport).where(
+                OfficerReport.faculty_id == faculty.id,
+                OfficerReport.report_date == report_date,
+            )
+        )
+        officer_report = or_result.scalar_one_or_none()
+        officer_status = (
+            fr.status
+            if fr
+            else (officer_report.status if officer_report else ReportStatus.DRAFT)
+        )
+        rows.append(
+            _row_from_agg(
+                faculty_id=faculty.id,
+                faculty_name=faculty.name,
+                course_id=None,
+                course_name="Офицеры",
+                agg=officer_agg,
+                status=officer_status,
+                is_officers=True,
+                row_kind="officers",
+            )
+        )
+
         courses = await get_courses_for_faculty(session, faculty.id)
         for course in courses:
             agg = await compute_aggregate_for_unit(session, course.id, report_date)
@@ -457,43 +476,6 @@ async def build_chessboard_faculty(
                 )
             )
 
-        officer_agg = await compute_aggregate_for_unit(
-            session,
-            faculty.id,
-            report_date,
-        )
-        fr_result = await session.execute(
-            select(FacultyReport).where(
-                FacultyReport.faculty_id == faculty.id,
-                FacultyReport.report_date == report_date,
-            )
-        )
-        fr = fr_result.scalar_one_or_none()
-        or_result = await session.execute(
-            select(OfficerReport).where(
-                OfficerReport.faculty_id == faculty.id,
-                OfficerReport.report_date == report_date,
-            )
-        )
-        officer_report = or_result.scalar_one_or_none()
-        status = (
-            fr.status
-            if fr
-            else (officer_report.status if officer_report else ReportStatus.DRAFT)
-        )
-        rows.append(
-            _row_from_agg(
-                faculty_id=faculty.id,
-                faculty_name=faculty.name,
-                course_id=None,
-                course_name="Офицеры",
-                agg=officer_agg,
-                status=status,
-                is_officers=True,
-                row_kind="officers",
-            )
-        )
-
     return rows
 
 
@@ -511,24 +493,39 @@ async def build_chessboard_location(
 
     for loc in locations:
         courses = await get_courses_for_location(session, loc.id)
-        course_aggs: list[AttendanceAggregate] = []
+        by_faculty: dict[int, list[Unit]] = {}
+        faculty_map: dict[int, Unit] = {}
         for course in courses:
             fac = await get_faculty_for_unit(session, course.id)
-            agg = await compute_aggregate_for_unit(session, course.id, report_date)
-            course_aggs.append(agg)
-            rows.append(
-                _row_from_agg(
-                    faculty_id=fac.id if fac else 0,
-                    faculty_name=fac.name if fac else "—",
-                    course_id=course.id,
-                    course_name=course.name,
-                    agg=agg,
-                    status=await _course_status(session, course.id, report_date),
-                    location_id=loc.id,
-                    location_name=loc.name,
-                    row_kind="course",
+            fid = fac.id if fac else 0
+            by_faculty.setdefault(fid, []).append(course)
+            if fac:
+                faculty_map[fid] = fac
+
+        # Офицеры факультета не привязаны к расположению и не входят в его итог,
+        # поэтому в этом разрезе выводятся только курсы.
+        course_aggs: list[AttendanceAggregate] = []
+        for fid in sorted(by_faculty.keys()):
+            for course in sorted(by_faculty[fid], key=lambda c: c.id):
+                fac = faculty_map.get(fid)
+                agg = await compute_aggregate_for_unit(session, course.id, report_date)
+                course_aggs.append(agg)
+                cr = await _course_report(session, course.id, report_date)
+                rows.append(
+                    _row_from_agg(
+                        faculty_id=fac.id if fac else 0,
+                        faculty_name=fac.name if fac else "—",
+                        course_id=course.id,
+                        course_name=course.name,
+                        agg=agg,
+                        status=cr.status if cr else ReportStatus.DRAFT,
+                        location_id=loc.id,
+                        location_name=loc.name,
+                        row_kind="course",
+                        changes_pending_dpf=bool(cr.changes_pending_dpf) if cr else False,
+                        changes_pending_dpa=bool(cr.changes_pending_dpa) if cr else False,
+                    )
                 )
-            )
         loc_total = sum_aggregates(course_aggs)
         location_parts.append(loc_total)
         rows.append(

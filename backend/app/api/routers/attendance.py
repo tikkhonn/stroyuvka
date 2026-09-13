@@ -168,7 +168,7 @@ async def _assert_report_editing(
         if report and report.status in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
             if not report.is_editing:
                 raise HTTPException(
-                    403, "Нажмите «Редактировать строевку» для внесения правок"
+                    403, "Нажмите «Редактировать строевую записку» для внесения правок"
                 )
         return
     if unit.type == UnitType.FACULTY:
@@ -182,7 +182,7 @@ async def _assert_report_editing(
         if report and report.status in (ReportStatus.SUBMITTED, ReportStatus.APPROVED):
             if not report.is_editing:
                 raise HTTPException(
-                    403, "Нажмите «Редактировать строевку» для внесения правок"
+                    403, "Нажмите «Редактировать строевую записку» для внесения правок"
                 )
 
 

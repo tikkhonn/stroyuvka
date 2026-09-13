@@ -10,7 +10,10 @@ import {
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { SummaryCards } from "../components/SummaryCards";
+import { ReportPipelineBar } from "../components/ReportPipelineBar";
 import { StatusBadge } from "../components/StatusBadge";
+import { SubmittedReportStatus } from "../components/SubmittedReportStatus";
+import { DutyLandlinePlaque } from "../components/DutyLandlinePlaque";
 import { onWsEvent } from "../api/ws";
 import { formatAbsenceName } from "../constants/ranks";
 import { formatAbsenceCategory, formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
@@ -95,6 +98,7 @@ function AbsencesList({ rows }: { rows: AbsenceEntry[] }) {
 function CourseCard({
   course,
   date,
+  role,
   canAckDpf,
   canAckDpa,
   defaultOpen,
@@ -102,6 +106,7 @@ function CourseCard({
 }: {
   course: FacultyStroevkaBundle["courses"][0];
   date: string;
+  role: string;
   canAckDpf: boolean;
   canAckDpa: boolean;
   defaultOpen: boolean;
@@ -133,7 +138,11 @@ function CourseCard({
         <span className="font-medium text-vka-navy">
           {open ? "▼" : "▶"} {course.course_name}
         </span>
-        {course.report_status && <StatusBadge status={course.report_status} />}
+        {role === "dpa" ? (
+          <ReportPipelineBar status={course.report_status} />
+        ) : (
+          course.report_status && <StatusBadge status={course.report_status} />
+        )}
         {pending && (
           <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
             есть изменения
@@ -194,10 +203,12 @@ function DepartmentBlock({ dept }: { dept: DepartmentStroevkaSummary }) {
 
 function OfficersCard({
   officers,
+  role,
   showEditHint,
   defaultOpen = false,
 }: {
   officers: AttendanceSnapshot;
+  role: string;
   showEditHint: boolean;
   defaultOpen?: boolean;
 }) {
@@ -215,7 +226,11 @@ function OfficersCard({
         <span className="font-medium text-vka-navy">
           {open ? "▼" : "▶"} Офицеры / постоянный состав
         </span>
-        {officers.report_status && <StatusBadge status={officers.report_status} />}
+        {role === "dpa" ? (
+          <ReportPipelineBar status={officers.report_status} isOfficers />
+        ) : (
+          officers.report_status && <StatusBadge status={officers.report_status} />
+        )}
         <span className="text-sm text-gray-600 ml-auto">
           список {officers.aggregate.total_list} · налицо {officers.aggregate.present}
         </span>
@@ -387,8 +402,8 @@ function FacultyBlock({
       );
       setMessage(
         res.is_resubmit
-          ? "Строевка факультета обновлена. ДПА уведомлён в чате."
-          : "Строевка факультета отправлена. ДПА уведомлён в чате."
+          ? "Строевая записка факультета обновлена. ДПА уведомлён в чате."
+          : "Строевая записка факультета отправлена. ДПА уведомлён в чате."
       );
       onReload();
     } catch (e) {
@@ -447,6 +462,7 @@ function FacultyBlock({
         <div className="bg-gray-50 p-4 rounded-b-lg">
           <OfficersCard
             officers={bundle.officers}
+            role={role}
             showEditHint={role === "dpf"}
             defaultOpen={role === "dpf"}
           />
@@ -462,6 +478,7 @@ function FacultyBlock({
                 key={c.course_id}
                 course={c}
                 date={date}
+                role={role}
                 canAckDpf={role === "dpf"}
                 canAckDpa={role === "dpa"}
                 defaultOpen={
@@ -502,13 +519,13 @@ function FacultyBlock({
                   className="bg-vka-navy text-white px-4 py-2 rounded text-sm hover:bg-vka-navy-light disabled:opacity-50"
                   onClick={submitFaculty}
                 >
-                  Отправить строевку за факультет
+                  Отправить строевую записку за факультет
                 </button>
               )}
               {isSubmitted && !isEditing && (
                 <>
                   <p className="text-sm text-gray-600">
-                    Строевка отправлена ДПА. Для правок нажмите «Редактировать».
+                    Строевая записка отправлена ДПА. Для правок нажмите «Редактировать».
                   </p>
                   <button
                     type="button"
@@ -516,7 +533,7 @@ function FacultyBlock({
                     className="bg-vka-gold text-vka-navy px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
                     onClick={startEditing}
                   >
-                    Редактировать строевку
+                    Редактировать строевую записку
                   </button>
                 </>
               )}
@@ -538,7 +555,7 @@ function FacultyBlock({
                     className="bg-vka-navy text-white px-4 py-2 rounded text-sm hover:bg-vka-navy-light disabled:opacity-50"
                     onClick={submitFaculty}
                   >
-                    Отправить строевку за факультет
+                    Отправить строевую записку за факультет
                   </button>
                 </>
               )}
@@ -578,7 +595,7 @@ export function StroevkaReviewPage() {
       }
     } catch (e) {
       setBundles([]);
-      setLoadError(e instanceof Error ? e.message : "Не удалось загрузить строевки");
+      setLoadError(e instanceof Error ? e.message : "Не удалось загрузить строевые записки");
     } finally {
       setLoading(false);
     }
@@ -607,13 +624,33 @@ export function StroevkaReviewPage() {
     };
   }, [load]);
 
+  const dpfBundle = role === "dpf" ? bundles[0] : undefined;
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-4 mb-4">
-        <h2 className="text-xl font-serif font-bold text-vka-navy">
-          {role === "dpf" ? "Строевые записки" : "Строевки академии"}
-        </h2>
-        <p className="text-sm text-gray-600">Дата: {reportDate}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-xl font-serif font-bold text-vka-navy">
+            {role === "dpf" ? "Строевые записки" : "Строевые записки академии"}
+          </h2>
+          {dpfBundle && !loading ? (
+            <SubmittedReportStatus
+              status={dpfBundle.faculty_report_status ?? "draft"}
+              submittedAt={dpfBundle.faculty_report_submitted_at}
+            />
+          ) : null}
+        </div>
+        {role !== "dpf" && <p className="text-sm text-gray-600">Дата: {reportDate}</p>}
+        {dpfBundle && !loading ? (
+          <div className="ml-auto">
+            <DutyLandlinePlaque
+              items={[
+                { label: "Нач. ф-т", phone: dpfBundle.officers.faculty_chief_landline },
+                { label: "ДПА", phone: dpfBundle.officers.dpa_landline },
+              ]}
+            />
+          </div>
+        ) : null}
       </div>
       {loadError && (
         <p className="mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">

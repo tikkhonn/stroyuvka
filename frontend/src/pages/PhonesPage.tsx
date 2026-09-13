@@ -95,7 +95,7 @@ function LandlineTable() {
 
   useEffect(() => {
     setError("");
-    void api<LandlinePhone[]>("/api/landline-phones")
+    void api<LandlinePhone[]>("/api/landline-phones?active_only=true")
       .then(setRows)
       .catch((err) => {
         setRows([]);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PersonRead } from "../api/client";
-import { formatRank } from "../constants/ranks";
+import { formatRank, ranksMatch } from "../constants/ranks";
 
 function personDisplayName(person: PersonRead): string {
   return person.display_name || person.full_name;
@@ -24,6 +24,7 @@ type Props = {
   value: number | null;
   onChange: (personId: number | null) => void;
   disabled?: boolean;
+  rankFilter?: string | null;
 };
 
 export function RosterPersonCombobox({
@@ -32,6 +33,7 @@ export function RosterPersonCombobox({
   value,
   onChange,
   disabled = false,
+  rankFilter = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -43,8 +45,11 @@ export function RosterPersonCombobox({
   );
 
   const suggestions = useMemo(() => {
-    return activePeople.filter((person) => matchesQuery(person, query));
-  }, [activePeople, query]);
+    return activePeople.filter((person) => {
+      if (rankFilter && !ranksMatch(person.rank, rankFilter)) return false;
+      return matchesQuery(person, query);
+    });
+  }, [activePeople, query, rankFilter]);
 
   useEffect(() => {
     if (value === null) {
@@ -53,9 +58,9 @@ export function RosterPersonCombobox({
     }
     const selected = activePeople.find((person) => person.id === value);
     if (selected) {
-      setQuery(personLabel(selected));
+      setQuery(rankFilter ? personDisplayName(selected) : personLabel(selected));
     }
-  }, [value, activePeople]);
+  }, [value, activePeople, rankFilter]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -76,7 +81,7 @@ export function RosterPersonCombobox({
   const handleSelect = (person: PersonRead) => {
     if (absentPersonIds.has(person.id)) return;
     onChange(person.id);
-    setQuery(personLabel(person));
+    setQuery(rankFilter ? personDisplayName(person) : personLabel(person));
     setOpen(false);
   };
 
@@ -90,7 +95,7 @@ export function RosterPersonCombobox({
         onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => setOpen(true)}
         placeholder="Начните вводить фамилию"
-        className="border rounded px-2 py-1 text-sm w-full"
+        className="border rounded px-2 py-1 text-sm w-full disabled:bg-gray-50"
         disabled={disabled}
         autoComplete="off"
         aria-autocomplete="list"
@@ -116,7 +121,7 @@ export function RosterPersonCombobox({
                       : "hover:bg-vka-cream/80 text-vka-navy"
                   }`}
                 >
-                  <span>{personLabel(person)}</span>
+                  <span>{rankFilter ? personDisplayName(person) : personLabel(person)}</span>
                   {alreadyAbsent && (
                     <span className="shrink-0 text-xs text-gray-400">уже отмечен</span>
                   )}

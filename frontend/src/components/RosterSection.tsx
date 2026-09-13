@@ -33,6 +33,8 @@ type Props = {
   onReload: () => Promise<void>;
   onMessage: (text: string) => void;
   setSaving: (value: boolean) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function RosterSection({
@@ -47,9 +49,17 @@ export function RosterSection({
   onReload,
   onMessage,
   setSaving,
+  open: openProp,
+  onOpenChange,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(true);
+  const [internalOpen, setInternalOpen] = useState(true);
+  const open = openProp ?? internalOpen;
+  const setOpen = (value: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof value === "function" ? value(open) : value;
+    if (openProp === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [localEditing, setLocalEditing] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -402,41 +412,46 @@ export function RosterSection({
           </div>
 
           {editable && (
-            <div className="flex flex-wrap items-end gap-x-4 mb-4">
-              <form onSubmit={addPerson} className="flex flex-wrap gap-2 items-end shrink-0">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Звание</label>
-                  <input
-                    list="roster-ranks"
-                    value={newRank}
-                    onChange={(e) => setNewRank(e.target.value)}
-                    className="border rounded px-2 py-1 text-sm"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">ФИО</label>
-                  <input
-                    value={newFullName}
-                    onChange={(e) => setNewFullName(e.target.value)}
-                    placeholder="Иванов И.И."
-                    className="border rounded px-2 py-1 text-sm"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Кафедра</label>
-                  <input
-                    value={newDepartment}
-                    onChange={(e) => setNewDepartment(e.target.value)}
-                    placeholder="61"
-                    className="border rounded px-2 py-1 text-sm w-20"
-                  />
+            <div className="space-y-3 mb-4">
+              <form
+                onSubmit={addPerson}
+                className="flex flex-wrap items-end justify-between gap-2 w-full"
+              >
+                <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Звание</label>
+                    <input
+                      list="roster-ranks"
+                      value={newRank}
+                      onChange={(e) => setNewRank(e.target.value)}
+                      className="border rounded px-2 py-1 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">ФИО</label>
+                    <input
+                      value={newFullName}
+                      onChange={(e) => setNewFullName(e.target.value)}
+                      placeholder="Иванов И.И."
+                      className="border rounded px-2 py-1 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Кафедра</label>
+                    <input
+                      value={newDepartment}
+                      onChange={(e) => setNewDepartment(e.target.value)}
+                      placeholder="61"
+                      className="border rounded px-2 py-1 text-sm w-20"
+                    />
+                  </div>
                 </div>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium"
+                  className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium shrink-0"
                 >
                   Добавить в список
                 </button>
@@ -445,41 +460,43 @@ export function RosterSection({
               {localEditing && (
                 <form
                   onSubmit={markSelected}
-                  className="flex flex-wrap gap-2 items-end bg-amber-50 border border-amber-200 px-3 py-2 rounded shrink-0"
+                  className="flex flex-wrap items-end justify-between gap-2 w-full bg-amber-50 border border-amber-200 px-3 py-2 rounded"
                 >
-                  <span className="text-sm text-amber-900 whitespace-nowrap pb-2">
-                    Выбрано: {selected.size}
-                  </span>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Причина отсутствия</label>
-                    <select
-                      value={bulkCategory}
-                      onChange={(e) => setBulkCategory(e.target.value)}
-                      className="border rounded px-2 py-1 text-sm"
-                    >
-                      {categories.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {!isSickCategory(bulkCategory) && (
+                  <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
+                    <span className="text-sm text-amber-900 whitespace-nowrap pb-2">
+                      Выбрано: {selected.size}
+                    </span>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Уточнение</label>
-                      <input
-                        value={bulkNote}
-                        onChange={(e) => setBulkNote(e.target.value)}
-                        placeholder={bulkDetailRequired ? "обязательно" : "необяз."}
+                      <label className="block text-xs text-gray-600 mb-1">Причина отсутствия</label>
+                      <select
+                        value={bulkCategory}
+                        onChange={(e) => setBulkCategory(e.target.value)}
                         className="border rounded px-2 py-1 text-sm"
-                        required={bulkDetailRequired}
-                      />
+                      >
+                        {categories.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
+                    {!isSickCategory(bulkCategory) && (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Уточнение</label>
+                        <input
+                          value={bulkNote}
+                          onChange={(e) => setBulkNote(e.target.value)}
+                          placeholder={bulkDetailRequired ? "обязательно" : "необяз."}
+                          className="border rounded px-2 py-1 text-sm"
+                          required={bulkDetailRequired}
+                        />
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="submit"
                     disabled={saving || selected.size === 0}
-                    className="bg-vka-navy text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+                    className="bg-vka-navy text-white px-3 py-2 rounded text-sm disabled:opacity-50 shrink-0"
                   >
                     Отметить
                   </button>

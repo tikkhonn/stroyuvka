@@ -12,6 +12,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { SummaryCards } from "../components/SummaryCards";
 import { StatusBadge } from "../components/StatusBadge";
+import { SubmittedReportStatus } from "../components/SubmittedReportStatus";
+import { DutyLandlinePlaque } from "../components/DutyLandlinePlaque";
 import { RosterSection } from "../components/RosterSection";
 import { RosterPersonCombobox } from "../components/RosterPersonCombobox";
 import { HospitalSelect } from "../components/HospitalSelect";
@@ -23,7 +25,7 @@ import {
   isSickCategory,
 } from "../constants/absenceCategories";
 import { todayLocal } from "../utils/date";
-import { formatRank } from "../constants/ranks";
+import { formatRank, ranksFromRoster, ranksMatch } from "../constants/ranks";
 
 const FALLBACK = ABSENCE_CATEGORY_OPTIONS;
 
@@ -40,9 +42,11 @@ export function AttendancePage() {
   const hasLoadedRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [rosterOpen, setRosterOpen] = useState(true);
   const [absencesOpen, setAbsencesOpen] = useState(true);
   const [absencesEditing, setAbsencesEditing] = useState(false);
   const [newCategory, setNewCategory] = useState("duty");
+  const [newRankFilter, setNewRankFilter] = useState("");
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [newDetail, setNewDetail] = useState("");
   const [newHospitalId, setNewHospitalId] = useState<number | null>(null);
@@ -150,9 +154,30 @@ export function AttendancePage() {
     [absenceByPersonId]
   );
 
+  const rosterRanks = useMemo(() => ranksFromRoster(people), [people]);
+
   useEffect(() => {
     setSelectedPersonId(null);
+    setNewRankFilter("");
   }, [unitId]);
+
+  const handleRankFilterChange = (rank: string) => {
+    setNewRankFilter(rank);
+    if (!selectedPersonId) return;
+    const person = people.find((p) => p.id === selectedPersonId);
+    if (person && rank && !ranksMatch(person.rank, rank)) {
+      setSelectedPersonId(null);
+    }
+  };
+
+  const handlePersonSelect = (personId: number | null) => {
+    setSelectedPersonId(personId);
+    if (personId === null) return;
+    const person = people.find((p) => p.id === personId);
+    if (person) {
+      setNewRankFilter(formatRank(person.rank));
+    }
+  };
 
   useEffect(() => {
     if (!snapshot?.editable) {
@@ -244,8 +269,8 @@ export function AttendancePage() {
       );
       setMessage(
         res.is_resubmit
-          ? "Строевка обновлена. ДПФ уведомлён в чате."
-          : "Строевка отправлена. ДПФ уведомлён в чате."
+          ? "Строевая записка обновлена. ДПФ уведомлён в чате."
+          : "Строевая записка отправлена. ДПФ уведомлён в чате."
       );
       await load();
     } catch (e) {
@@ -253,8 +278,13 @@ export function AttendancePage() {
     }
   };
 
+  const openAbsencesSection = () => {
+    setAbsencesOpen(true);
+  };
+
   const startEditing = async () => {
     if (!unitId) return;
+    openAbsencesSection();
     const selected = units.find((u) => u.id === unitId);
     const path =
       selected?.type === "faculty"
@@ -292,6 +322,20 @@ export function AttendancePage() {
   const isEditing = Boolean(snapshot?.is_editing);
   const selectedMeta = units.find((u) => u.id === unitId);
   const canSubmitCourse = session?.role === "dpk";
+  const isDpf = session?.role === "dpf";
+  const showSubmittedStatus = (canSubmitCourse || isDpf) && snapshot;
+  const showDutyPlaque = (canSubmitCourse || isDpf) && snapshot;
+  const dutyPlaqueItems = canSubmitCourse
+    ? [
+        { label: "ДПФ", phone: snapshot?.dpf_landline },
+        { label: "ДПА", phone: snapshot?.dpa_landline },
+      ]
+    : isDpf
+      ? [
+          { label: "Нач. ф-т", phone: snapshot?.faculty_chief_landline },
+          { label: "ДПА", phone: snapshot?.dpa_landline },
+        ]
+      : [];
   const canStartEditing =
     (session?.role === "dpk" || session?.role === "dpf" || session?.shell === "admin") &&
     isSubmitted &&
@@ -301,24 +345,41 @@ export function AttendancePage() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-4 mb-4">
-        <h2 className="text-xl font-serif font-bold text-vka-navy">
-          Расход — {snapshot?.unit_name || selectedMeta?.name || "..."}
-        </h2>
-        <p className="text-sm text-gray-600">Дата: {reportDate}</p>
-        {snapshot?.report_status && <StatusBadge status={snapshot.report_status} />}
-        {units.length > 1 && (
-          <select
-            className="border rounded px-2 py-1 text-sm ml-auto"
-            value={unitId ?? ""}
-            onChange={(e) => selectUnit(Number(e.target.value))}
-          >
-            {units.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-xl font-serif font-bold text-vka-navy">
+            Расход — {snapshot?.unit_name || selectedMeta?.name || "..."}
+          </h2>
+          {showSubmittedStatus ? (
+            <SubmittedReportStatus
+              status={snapshot.report_status ?? "draft"}
+              submittedAt={snapshot.report_submitted_at}
+            />
+          ) : null}
+        </div>
+        {!canSubmitCourse && !isDpf && (
+          <p className="text-sm text-gray-600">Дата: {reportDate}</p>
         )}
+        {!canSubmitCourse && !isDpf && snapshot?.report_status ? (
+          <StatusBadge status={snapshot.report_status} />
+        ) : null}
+        {showDutyPlaque || units.length > 1 ? (
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            {showDutyPlaque ? <DutyLandlinePlaque items={dutyPlaqueItems} /> : null}
+            {units.length > 1 ? (
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={unitId ?? ""}
+                onChange={(e) => selectUnit(Number(e.target.value))}
+              >
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {message && (
@@ -337,6 +398,18 @@ export function AttendancePage() {
           )}
           <SummaryCards agg={snapshot.aggregate} />
 
+          {canStartEditing && (
+            <div className="flex justify-end mb-4 no-print">
+              <button
+                type="button"
+                onClick={() => void startEditing()}
+                className="bg-vka-gold text-vka-navy px-4 py-2 rounded font-medium hover:opacity-90"
+              >
+                Редактировать строевую записку
+              </button>
+            </div>
+          )}
+
           <RosterSection
             unitId={unitId!}
             reportDate={reportDate}
@@ -349,6 +422,8 @@ export function AttendancePage() {
             onReload={load}
             onMessage={setMessage}
             setSaving={setSaving}
+            open={rosterOpen}
+            onOpenChange={setRosterOpen}
           />
 
           <div className="bg-white rounded-lg shadow mb-4 border border-gray-200">
@@ -381,7 +456,11 @@ export function AttendancePage() {
             {absencesOpen && (
               <div className="p-4">
                 {editable && (
-                  <form onSubmit={addAbsence} className="flex flex-wrap gap-2 mb-4 items-end">
+                  <form
+                    onSubmit={addAbsence}
+                    className="flex flex-wrap items-end justify-between gap-2 mb-4 w-full"
+                  >
+                    <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
                     <div>
                       <label className="block text-xs text-gray-600 mb-1">Причина отсутствия</label>
                       <select
@@ -397,13 +476,32 @@ export function AttendancePage() {
                       </select>
                     </div>
                     <div>
+                      <label className="block text-xs text-gray-600 mb-1">Звание</label>
+                      <select
+                        value={newRankFilter}
+                        onChange={(e) => handleRankFilterChange(e.target.value)}
+                        className="border rounded px-2 py-1 text-sm min-w-[160px]"
+                        disabled={saving || rosterRanks.length === 0}
+                      >
+                        <option value="">
+                          {rosterRanks.length === 0 ? "Список пуст" : "Все звания"}
+                        </option>
+                        {rosterRanks.map((rank) => (
+                          <option key={rank} value={rank}>
+                            {rank}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-xs text-gray-600 mb-1">ФИО</label>
                       <RosterPersonCombobox
                         people={people}
                         absentPersonIds={absentPersonIds}
                         value={selectedPersonId}
-                        onChange={setSelectedPersonId}
+                        onChange={handlePersonSelect}
                         disabled={saving}
+                        rankFilter={newRankFilter || null}
                       />
                     </div>
                     {addingSick ? (
@@ -440,10 +538,11 @@ export function AttendancePage() {
                         />
                       </div>
                     )}
+                    </div>
                     <button
                       type="submit"
                       disabled={saving || selectedPersonId === null}
-                      className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium disabled:opacity-50"
+                      className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium disabled:opacity-50 shrink-0"
                     >
                       Добавить вручную
                     </button>
@@ -557,48 +656,34 @@ export function AttendancePage() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2 no-print">
+          <div className="mt-4 space-y-2 no-print">
             {sickMissingHospital && (
-              <p className="w-full text-sm text-red-800 bg-red-50 px-3 py-2 rounded">
-                Укажите мед. учреждение у всех больных, иначе строевку нельзя отправить.
+              <p className="text-sm text-red-800 bg-red-50 px-3 py-2 rounded">
+                Укажите мед. учреждение у всех больных, иначе строевую записку нельзя отправить.
               </p>
             )}
-            {canSubmitCourse && (!isSubmitted || snapshot.report_status === "draft") && (
-              <button
-                onClick={() => void submitReport()}
-                disabled={sickMissingHospital}
-                className="bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light disabled:opacity-50"
-              >
-                Отправить строевку
-              </button>
-            )}
             {canStartEditing && (
-              <>
-                <p className="text-sm text-gray-600 self-center">
-                  Строевка отправлена. Для правок нажмите «Редактировать».
-                </p>
-                <button
-                  onClick={() => void startEditing()}
-                  className="bg-vka-gold text-vka-navy px-4 py-2 rounded font-medium hover:opacity-90"
-                >
-                  Редактировать строевку
-                </button>
-              </>
+              <p className="text-sm text-gray-600">
+                Строевая записка отправлена. Для правок нажмите «Редактировать строевую записку» выше.
+              </p>
             )}
             {canSubmitCourse && isSubmitted && isEditing && (
-              <>
-                <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded self-center">
-                  Режим редактирования — изменения не уходят в чат до отправки.
-                </p>
+              <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded">
+                Режим редактирования — изменения не уходят в чат до отправки.
+              </p>
+            )}
+            {(canSubmitCourse && (!isSubmitted || snapshot.report_status === "draft")) ||
+            (canSubmitCourse && isSubmitted && isEditing) ? (
+              <div className="flex justify-end">
                 <button
                   onClick={() => void submitReport()}
                   disabled={sickMissingHospital}
                   className="bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light disabled:opacity-50"
                 >
-                  Отправить строевку
+                  Отправить строевую записку
                 </button>
-              </>
-            )}
+              </div>
+            ) : null}
           </div>
         </>
       )}

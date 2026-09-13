@@ -1,6 +1,6 @@
 """Схема ID подразделений ОШС.
 
-Расположения: 1001 — Академия, 1002 — Пушкин, 1003 — Лехтуси
+Расположения: 1001 — Академия, 1002 — ВГ №6 (Пушкин), 1003 — ВГ №61 (Лехтуси)
   (высокие id, чтобы не пересекаться с факультетами 1–9 и курсами F×10+C)
 Факультеты: id = номер факультета (1..99), без расположения (parent_id = null)
 Курсы: id = номер_факультета × 10 + год обучения (1–5); parent = расположение
@@ -19,8 +19,8 @@ LOCATION_LEKHTUSI = 1003
 
 LOCATION_NAMES: dict[int, str] = {
     LOCATION_ACADEMY: "Академия",
-    LOCATION_PUSHKIN: "Пушкин",
-    LOCATION_LEKHTUSI: "Лехтуси",
+    LOCATION_PUSHKIN: "ВГ №6 (Пушкин)",
+    LOCATION_LEKHTUSI: "ВГ №61 (Лехтуси)",
 }
 
 DEFAULT_COURSE_LOCATION_ID = LOCATION_ACADEMY
@@ -48,7 +48,7 @@ def parse_course_id(unit_id: int) -> tuple[int, int]:
 
 
 def course_display_name(faculty_number: int, course_number: int) -> str:
-    return f"{course_number} курс ({faculty_number} фак)"
+    return f"{course_id(faculty_number, course_number)} курс"
 
 
 async def sync_units_id_sequence(session: AsyncSession) -> None:

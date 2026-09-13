@@ -186,6 +186,26 @@ def _contact_visible(
     return False
 
 
+async def get_duty_contact_on_date(
+    session: AsyncSession,
+    contact_date: date,
+    unit_id: int,
+    post_type: DutyPostType,
+) -> DutyContact | None:
+    """Дежурный, зарегистрировавшийся на посту unit_id в указанную дату."""
+    result = await session.execute(
+        select(DutyContact)
+        .join(DutyPost, DutyContact.duty_post_id == DutyPost.id)
+        .where(
+            DutyContact.contact_date == contact_date,
+            DutyContact.unit_id == unit_id,
+            DutyPost.post_type == post_type.value,
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def list_contacts_for_user(
     session: AsyncSession,
     user: AuthUser,

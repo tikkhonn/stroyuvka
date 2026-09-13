@@ -30,9 +30,6 @@ const ITEMS: { key: SummaryCardKey; label: string }[] = [
   { key: "arrest", label: "Арест" },
 ];
 
-const GLASS_OVERLAY =
-  "before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-br before:from-white/28 before:via-white/10 before:to-transparent after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:ring-1 after:ring-inset after:ring-white/22";
-
 export function SummaryCards({ agg, hints }: SummaryCardsProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
@@ -41,25 +38,30 @@ export function SummaryCards({ agg, hints }: SummaryCardsProps) {
         return (
           <div
             key={item.key}
-            className={`relative overflow-hidden rounded-xl p-3 min-h-[4.75rem] text-white shadow-vka border border-white/20 backdrop-blur-sm ${GLASS_OVERLAY} ${SUMMARY_CARD_BG_CLASS[item.key]}`}
+            className="relative overflow-hidden rounded-lg p-3 min-h-[4.75rem] text-white shadow-vka"
           >
-            <div className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-white/20 p-2 backdrop-blur-sm">
-              <Icon className="w-6 h-6" />
-            </div>
+            <div
+              className={`absolute inset-0 ${SUMMARY_CARD_BG_CLASS[item.key]}`}
+              aria-hidden
+            />
+            <div className="absolute inset-0 bg-black/25" aria-hidden />
 
-            <div className="relative z-10">
-              <div className="px-9 text-center">
-                <p className="text-4xl font-serif font-bold leading-none tabular-nums drop-shadow-sm">
+            <div className="relative z-10 flex items-start gap-2.5">
+              <div className="rounded-md bg-white/20 p-2 shrink-0 -mt-0.5">
+                <Icon className="w-6 h-6 text-white" />
+              </div>
+
+              <div className="flex-1 min-w-0 flex flex-col items-end">
+                <p className="text-4xl font-serif font-bold leading-none tabular-nums text-white">
                   {agg[item.key]}
                 </p>
                 {hints?.[item.key] ? (
-                  <div className="mt-1 flex justify-center text-white/90">{hints[item.key]}</div>
+                  <div className="mt-1 flex justify-end text-white">{hints[item.key]}</div>
                 ) : null}
+                <p className="mt-2 text-[10px] uppercase tracking-wide leading-tight text-white text-right w-full">
+                  {item.label}
+                </p>
               </div>
-
-              <p className="mt-2 text-[10px] uppercase tracking-wide leading-tight text-white/90 text-right">
-                {item.label}
-              </p>
             </div>
           </div>
         );

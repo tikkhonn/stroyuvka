@@ -28,6 +28,10 @@ export interface LandlinePhone {
   id: number;
   name: string;
   phone: string;
+  sort_order: number;
+  is_active: boolean;
+  duty_scope?: "dpa" | "dpf" | "faculty_chief" | null;
+  faculty_id?: number | null;
 }
 
 export interface DutyPost {
@@ -236,10 +240,14 @@ export interface AttendanceSnapshot {
   people?: PersonAttendanceRow[];
   departments?: DepartmentStroevkaSummary[];
   report_status: ReportStatus | null;
+  report_submitted_at?: string | null;
   editable: boolean;
   changes_pending_dpf?: boolean;
   changes_pending_dpa?: boolean;
   is_editing?: boolean;
+  dpf_landline?: string | null;
+  dpa_landline?: string | null;
+  faculty_chief_landline?: string | null;
 }
 
 export interface AttendanceUnitOption {
@@ -304,6 +312,7 @@ export interface FacultyStroevkaBundle {
   has_pending_for_dpf: boolean;
   has_pending_for_dpa: boolean;
   faculty_report_status?: ReportStatus | null;
+  faculty_report_submitted_at?: string | null;
   is_editing?: boolean;
   submit_blockers?: string[];
 }

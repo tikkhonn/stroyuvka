@@ -11,6 +11,20 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { SummaryCards } from "../components/SummaryCards";
 import { todayLocal } from "../utils/date";
 
+function PercentHint({ pct }: { pct: number }) {
+  return (
+    <span className="relative group inline-block align-baseline" tabIndex={0}>
+      <span className="border-b border-dotted border-gray-400 cursor-default">{pct}%</span>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {pct}% — налицо
+      </span>
+    </span>
+  );
+}
+
 function DeltaBadge({ value }: { value: number }) {
   if (value === 0) return null;
   const up = value > 0;
@@ -34,7 +48,7 @@ function BreakdownRow({ row }: { row: OverviewUnitBreakdown }) {
       <div className="flex items-baseline justify-between gap-3 mb-1.5">
         <span className="font-medium text-vka-navy truncate">{row.unit_name}</span>
         <span className="text-sm text-gray-600 shrink-0">
-          {a.present} / {a.total_list} · {pct}%
+          {a.present} / {a.total_list} · <PercentHint pct={pct} />
         </span>
       </div>
       <div className="h-2 bg-gray-100 rounded overflow-hidden">
@@ -120,7 +134,7 @@ export function ChiefOverviewPage() {
   return (
     <div>
       <PageHeader
-        title="Строевка академии"
+        title="Строевая записка академии"
         subtitle="Сводка на выбранную дату"
         action={
           <label className="text-sm flex items-center gap-2">
@@ -149,33 +163,22 @@ export function ChiefOverviewPage() {
         <>
           <SummaryCards
             agg={data.academy}
-            hints={{
-              present: (
-                <>
-                  {data.delta_vs_yesterday ? (
-                    <DeltaBadge value={data.delta_vs_yesterday.present} />
-                  ) : null}
-                  <p className="text-[10px] text-white/80">{data.present_percent}% от списка</p>
-                </>
-              ),
-              sick: data.delta_vs_yesterday ? (
-                <DeltaBadge value={data.delta_vs_yesterday.sick} />
-              ) : null,
-              trip: data.delta_vs_yesterday ? (
-                <DeltaBadge value={data.delta_vs_yesterday.trip} />
-              ) : null,
-              leave: data.delta_vs_yesterday ? (
-                <DeltaBadge value={data.delta_vs_yesterday.leave} />
-              ) : null,
-              dismissal: data.delta_vs_yesterday ? (
-                <DeltaBadge value={data.delta_vs_yesterday.dismissal} />
-              ) : null,
-            }}
+            hints={
+              data.delta_vs_yesterday
+                ? {
+                    present: <DeltaBadge value={data.delta_vs_yesterday.present} />,
+                    sick: <DeltaBadge value={data.delta_vs_yesterday.sick} />,
+                    trip: <DeltaBadge value={data.delta_vs_yesterday.trip} />,
+                    leave: <DeltaBadge value={data.delta_vs_yesterday.leave} />,
+                    dismissal: <DeltaBadge value={data.delta_vs_yesterday.dismissal} />,
+                  }
+                : undefined
+            }
           />
 
           {readiness && (
             <Card className="mb-8">
-              <CardHeader title="Готовность строевки на сегодня" />
+              <CardHeader title="Готовность строевой записки на сегодня" />
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex justify-between text-sm mb-1">
@@ -208,7 +211,7 @@ export function ChiefOverviewPage() {
               </div>
               {readinessPct < 100 && (
                 <p className="text-xs text-amber-700 mt-3 bg-amber-50 rounded-lg px-3 py-2">
-                  Картина может быть неполной — не все курсы передали строевку.
+                  Картина может быть неполной — не все курсы передали строевую записку.
                 </p>
               )}
             </Card>

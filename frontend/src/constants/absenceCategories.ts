@@ -11,7 +11,7 @@ export const ABSENCE_CATEGORY_OPTIONS: AbsenceCategoryOption[] = [
   { code: "arrest", label: "Арест", detail_required: false },
 ];
 
-export const ABSENCE_CATEGORY_LABELS: Record<string, string> = {
+const ABSENCE_CATEGORY_LABELS: Record<string, string> = {
   duty: "Наряд",
   trip: "Командировка",
   leave: "Отпуск",
@@ -25,11 +25,11 @@ export const ABSENCE_CATEGORY_LABELS: Record<string, string> = {
   awol_other: "Прочее",
 };
 
-export function categoryLabel(code: string): string {
+function categoryLabel(code: string): string {
   return ABSENCE_CATEGORY_LABELS[code] || code;
 }
 
-export const PERSISTENT_ABSENCE_CODES = new Set([
+const PERSISTENT_ABSENCE_CODES = new Set([
   "sick",
   "trip",
   "leave",
@@ -80,7 +80,7 @@ export type AbsenceCategoryKey =
   | "other"
   | "arrest";
 
-export function normalizeAbsenceCategoryCode(code: string): AbsenceCategoryKey {
+function normalizeAbsenceCategoryCode(code: string): AbsenceCategoryKey {
   if (code === "sick_med" || code === "sick_hosp") return "sick";
   if (code === "awol_other") return "other";
   if (
@@ -114,7 +114,7 @@ export const ABSENCE_CATEGORY_TEXT_CLASS: Record<AbsenceCategoryKey, string> = {
 };
 
 /** Light row background per absence reason (roster / tables). */
-export const ABSENCE_CATEGORY_ROW_CLASS: Record<AbsenceCategoryKey, string> = {
+const ABSENCE_CATEGORY_ROW_CLASS: Record<AbsenceCategoryKey, string> = {
   duty: "bg-blue-100",
   trip: "bg-teal-100",
   leave: "bg-lime-100",
@@ -137,21 +137,21 @@ export const ABSENCE_CATEGORY_HEX: Record<AbsenceCategoryKey, string> = {
   arrest: "#334155",
 };
 
-/** Solid fill for expense summary cards (muted, slightly bright). */
+/** Solid fill for expense summary cards. */
 export const SUMMARY_CARD_BG_CLASS: Record<
   AbsenceCategoryKey | "total_list" | "present",
   string
 > = {
-  total_list: "bg-[#5E7390]",
-  present: "bg-[#5A9978]",
-  duty: "bg-[#6889A8]",
-  trip: "bg-[#609690]",
-  leave: "bg-[#849858]",
-  sick: "bg-[#AB6969]",
-  dismissal: "bg-[#A88858]",
-  away_dorm: "bg-[#B07858]",
-  other: "bg-[#946898]",
-  arrest: "bg-[#6E7890]",
+  total_list: "bg-vka-navy",
+  present: "bg-emerald-600",
+  duty: "bg-blue-700",
+  trip: "bg-teal-700",
+  leave: "bg-lime-600",
+  sick: "bg-red-600",
+  dismissal: "bg-amber-700",
+  away_dorm: "bg-orange-600",
+  other: "bg-fuchsia-700",
+  arrest: "bg-slate-700",
 };
 
 export function absenceCategoryTextClass(code: string): string {

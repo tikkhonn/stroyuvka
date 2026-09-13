@@ -1,12 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { AuthSession } from "../api/client";
 import { ChatUnreadProvider, useChatUnread } from "../context/ChatUnreadContext";
+import { openDutyStroevkaPrint } from "../utils/stroevayaPrint";
 import { Logo } from "./brand/Logo";
 import { DutyOnboardingProvider } from "./DutyOnboardingGate";
 
 const NAV_DPA = [
   { to: "/chessboard", label: "Шахматка" },
-  { to: "/stroevka", label: "Строевки" },
+  { to: "/stroevka", label: "Строевые записки" },
   { to: "/chat", label: "Чат ДПФ" },
   { to: "/phones", label: "Телефоны" },
   { to: "/print", label: "Печать" },
@@ -40,6 +42,7 @@ const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
   admin: [
     { to: "/admin/units", label: "ОШС" },
     { to: "/admin/hospitals", label: "Мед. учреждения" },
+    { to: "/admin/landline-phones", label: "Стационарные" },
     { to: "/attendance", label: "Расход" },
     { to: "/admin/duty-contacts", label: "Дежурные" },
     { to: "/audit", label: "Журнал" },
@@ -47,7 +50,7 @@ const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
     { to: "/help", label: "Инструкция" },
   ],
   chief: [
-    { to: "/overview", label: "Строевка" },
+    { to: "/overview", label: "Строевая записка" },
     { to: "/trends", label: "Динамика" },
     { to: "/phones", label: "Телефоны" },
   ],
@@ -57,7 +60,7 @@ const SECONDARY_NAV_PATHS = new Set(["/shift-change", "/documentation", "/help"]
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Администратор",
-  chief: "Начальник",
+  chief: "Строевой отдел",
   dpa: "ДПА",
   dpf: "ДПФ",
   dpk: "ДПК",
@@ -99,26 +102,37 @@ function HeaderActions() {
   );
 }
 
+function navPillClass(active: boolean, showUnread: boolean) {
+  return `nav-pill ${
+    active
+      ? "nav-pill-active"
+      : showUnread
+        ? "bg-red-600/90 text-white ring-2 ring-red-400/50"
+        : "nav-pill-idle"
+  }`;
+}
+
 function NavPill({
   item,
   active,
   showUnread,
+  onPrintClick,
 }: {
   item: { to: string; label: string };
   active: boolean;
   showUnread: boolean;
+  onPrintClick?: () => void;
 }) {
+  if (onPrintClick) {
+    return (
+      <button type="button" onClick={onPrintClick} className={navPillClass(active, showUnread)}>
+        {item.label}
+      </button>
+    );
+  }
+
   return (
-    <Link
-      to={item.to}
-      className={`nav-pill ${
-        active
-          ? "nav-pill-active"
-          : showUnread
-            ? "bg-red-600/90 text-white ring-2 ring-red-400/50"
-            : "nav-pill-idle"
-      }`}
-    >
+    <Link to={item.to} className={navPillClass(active, showUnread)}>
       {item.label}
       {showUnread && (
         <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold">
@@ -129,7 +143,22 @@ function NavPill({
   );
 }
 
-export function Header() {
+function dutyPrintHandler(session: AuthSession) {
+  return () => {
+    const role = session.role;
+    if (role !== "dpk" && role !== "dpf") return;
+    const printWindow = window.open("", "_blank");
+    void openDutyStroevkaPrint({
+      role,
+      unitId: session.unit_id,
+      printWindow,
+    }).catch((e) => {
+      alert(e instanceof Error ? e.message : "Ошибка печати");
+    });
+  };
+}
+
+function Header() {
   const { session } = useAuth();
   const location = useLocation();
   const { navHasUnread } = useChatUnread();
@@ -140,11 +169,21 @@ export function Header() {
 
   const renderNavItem = (item: { to: string; label: string }) => {
     const isChat = item.to === "/chat";
+    const isDutyPrint =
+      item.to === "/print" &&
+      session != null &&
+      (session.role === "dpk" || session.role === "dpf");
     const active =
       location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
     const showUnread = isChat && navHasUnread && !onChat;
     return (
-      <NavPill key={item.to} item={item} active={active} showUnread={showUnread} />
+      <NavPill
+        key={item.to}
+        item={item}
+        active={active}
+        showUnread={showUnread}
+        onPrintClick={isDutyPrint ? dutyPrintHandler(session!) : undefined}
+      />
     );
   };
 
@@ -176,7 +215,7 @@ export function Header() {
   );
 }
 
-export function Footer() {
+function Footer() {
   return (
     <footer className="bg-vka-navy text-vka-gray text-sm mt-auto no-print border-t border-vka-gold/20">
       <div className="max-w-7xl mx-auto px-4 py-8">

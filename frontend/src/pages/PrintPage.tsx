@@ -3,6 +3,8 @@ import { todayLocal } from "../utils/date";
 import { UnitRead, api, downloadFile } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ABSENCE_CATEGORY_OPTIONS } from "../constants/absenceCategories";
+import { DutyAutoPrint } from "../components/DutyAutoPrint";
+import { openPrintHtml } from "../utils/stroevayaPrint";
 
 type Scope = "academy" | "location" | "faculty";
 type ReportKind = Scope | "by_category";
@@ -38,29 +40,6 @@ export function PrintPage() {
     const token = localStorage.getItem("token");
     const base = import.meta.env.VITE_API_URL || "";
 
-    if (isDpk || isDpf) {
-      const printScope = isDpk ? "unit" : "faculty";
-      const params = new URLSearchParams({
-        report_date: reportDate,
-        scope: printScope,
-        unit_id: String(session?.unit_id ?? ""),
-      });
-      const res = await fetch(`${base}/api/print/stroevaya?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const html = await res.text();
-      if (!res.ok) {
-        alert(html || "Ошибка печати");
-        return;
-      }
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.write(html);
-        w.document.close();
-      }
-      return;
-    }
-
     const scope: Scope =
       reportKind === "by_category" ? "academy" : reportKind;
 
@@ -89,11 +68,7 @@ export function PrintPage() {
       alert(html || "Ошибка печати");
       return;
     }
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    }
+    openPrintHtml(html);
   };
 
   const exportRashodXlsx = async () => {
@@ -112,48 +87,11 @@ export function PrintPage() {
   const unitOptions = reportKind === "location" ? locations : faculties;
 
   if (isDpk) {
-    return (
-      <div>
-        <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">
-          Строевая записка курса
-        </h2>
-        <p className="text-sm text-gray-600 mb-4">
-          {session?.display_name || "Ваш курс"} — печать строевки на сегодня ({reportDate}).
-        </p>
-
-        <div className="bg-white rounded-lg shadow p-4 mb-4">
-          <button
-            onClick={openPrint}
-            className="inline-block bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light"
-          >
-            Открыть и печатать
-          </button>
-        </div>
-      </div>
-    );
+    return <DutyAutoPrint role="dpk" unitId={session?.unit_id ?? null} />;
   }
 
   if (isDpf) {
-    return (
-      <div>
-        <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">
-          Строевая записка факультета
-        </h2>
-        <p className="text-sm text-gray-600 mb-4">
-          {session?.display_name || "Ваш факультет"} — сводный расход всех курсов и офицеров на
-          сегодня ({reportDate}).
-        </p>
-
-        <div className="bg-white rounded-lg shadow p-4 mb-4">
-          <button
-            onClick={openPrint}
-            className="inline-block bg-vka-navy text-white px-4 py-2 rounded hover:bg-vka-navy-light"
-          >
-            Открыть и печатать
-          </button>
-        </div>
-      </div>
-    );
+    return <DutyAutoPrint role="dpf" unitId={session?.unit_id ?? null} />;
   }
 
   return (

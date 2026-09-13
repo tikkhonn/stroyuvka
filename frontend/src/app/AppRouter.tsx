@@ -13,6 +13,7 @@ import { StroevkaReviewPage } from "../pages/StroevkaReviewPage";
 import { ShiftChangePage } from "../pages/ShiftChangePage";
 import { AdminUnitsPage, AuditPage } from "../pages/AdminPages";
 import { AdminHospitalsPage } from "../pages/AdminHospitalsPage";
+import { AdminLandlinePhonesPage } from "../pages/AdminLandlinePhonesPage";
 import { AdminDutyContactsPage } from "../pages/AdminDutyContactsPage";
 import { ChiefOverviewPage } from "../pages/ChiefOverviewPage";
 import { ChiefTrendsPage } from "../pages/ChiefTrendsPage";
@@ -179,6 +180,14 @@ export function AppRouter() {
                   element={
                     <RequireShell shells={["admin"]}>
                       <AdminHospitalsPage />
+                    </RequireShell>
+                  }
+                />
+                <Route
+                  path="/admin/landline-phones"
+                  element={
+                    <RequireShell shells={["admin"]}>
+                      <AdminLandlinePhonesPage />
                     </RequireShell>
                   }
                 />

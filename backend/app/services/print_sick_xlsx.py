@@ -28,7 +28,7 @@ from app.services.attendance import (
 )
 from app.services.org import get_courses_for_faculty, get_courses_for_location
 from app.services.reports import build_chessboard_sick_summary
-from app.services.unit_ids import LOCATION_LEKHTUSI, LOCATION_PUSHKIN
+from app.services.unit_ids import LOCATION_LEKHTUSI, LOCATION_NAMES, LOCATION_PUSHKIN
 
 SICK_HEADERS = ("№", "Подр", "Фамилия, инициалы", "Мед. учреждение", "Диагноз", "Дата")
 SICK_COL_WIDTHS = (6, 10, 28, 24, 28, 14)
@@ -294,7 +294,7 @@ def _write_variable_sheet(
     row += 2
 
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=last_col)
-    ws.cell(row, 1, "Лехтуси")
+    ws.cell(row, 1, LOCATION_NAMES[LOCATION_LEKHTUSI])
     ws.cell(row, 1).font = Font(bold=True)
     row += 1
     _write_header_row(ws, headers, row)
@@ -305,13 +305,16 @@ def _write_variable_sheet(
     _write_data_row(
         ws,
         row,
-        _line_values(_sum_lines("Итого за Лехтуси", lekhtusi_lines), facilities),
+        _line_values(
+            _sum_lines(f"Итого за {LOCATION_NAMES[LOCATION_LEKHTUSI]}", lekhtusi_lines),
+            facilities,
+        ),
         bold=True,
     )
     row += 2
 
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=last_col)
-    ws.cell(row, 1, "в том числе Пушкин")
+    ws.cell(row, 1, f"в том числе {LOCATION_NAMES[LOCATION_PUSHKIN]}")
     ws.cell(row, 1).font = Font(bold=True)
     row += 1
     _write_header_row(ws, headers, row)
@@ -322,7 +325,10 @@ def _write_variable_sheet(
     _write_data_row(
         ws,
         row,
-        _line_values(_sum_lines("Итого за Пушкин", pushkin_lines), facilities),
+        _line_values(
+            _sum_lines(f"Итого за {LOCATION_NAMES[LOCATION_PUSHKIN]}", pushkin_lines),
+            facilities,
+        ),
         bold=True,
     )
 

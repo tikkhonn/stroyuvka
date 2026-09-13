@@ -49,7 +49,7 @@ export function LoginPage() {
         <div className="login-screen__card">
           <div className="mb-6 text-center">
             <h1 className="font-serif text-3xl font-bold text-vka-navy">ПУЛЬС.ВКА</h1>
-            <p className="mt-1.5 whitespace-nowrap text-[10px] font-semibold tracking-[0.04em] text-[#F5C451] drop-shadow-[0_1px_2px_rgba(230,189,117,0.35)] sm:text-[11px] sm:tracking-[0.06em]">
+            <p className="mt-1.5 whitespace-nowrap text-[20px] font-semibold tracking-[0.04em] text-[#F5C451] drop-shadow-[0_1px_2px_rgba(230,189,117,0.35)] sm:text-[14px] sm:tracking-[0.06em]">
               ПЛАТФОРМА УЧЕТА ЛИЧНОГО СОСТАВА
             </p>
           </div>
@@ -75,7 +75,7 @@ export function LoginPage() {
                   : "text-gray-600 hover:text-vka-navy"
               }`}
             >
-              Админ / начальник
+              Админ / офицер 
             </button>
           </div>
 

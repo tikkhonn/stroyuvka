@@ -5,11 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import AuthKind, DutyPostType
 from app.models import ChatMessage
 from app.schemas import AuthUser
+from app.services.unit_ids import course_display_name, parse_course_id
 from app.ws.manager import ws_manager
 
 
 def course_chat_label(course_id: int) -> str:
-    return f"{course_id} курсу"
+    try:
+        faculty_number, course_number = parse_course_id(course_id)
+        return course_display_name(faculty_number, course_number)
+    except ValueError:
+        return f"{course_id} курс"
 
 
 def faculty_chat_label(faculty_id: int) -> str:
@@ -100,7 +105,7 @@ async def notify_dpk_stroevka_submitted(
     faculty_id: int,
 ) -> None:
     label = course_chat_label(course_id)
-    body = f"Дежурный по {label} строевку скинул."
+    body = f"{label}: отправлена строевая записка."
     await post_faculty_chat_message(
         session,
         faculty_id=faculty_id,
@@ -120,7 +125,7 @@ async def notify_dpk_stroevka_updated(
     if user.post_type != DutyPostType.DPK.value:
         return
     label = course_chat_label(course_id)
-    body = f"Дежурный по {label} строевку обновил."
+    body = f"{label}: обновлена строевая записка."
     await post_faculty_chat_message(
         session,
         faculty_id=faculty_id,
@@ -137,7 +142,7 @@ async def notify_dpf_stroevka_submitted(
     faculty_id: int,
 ) -> None:
     label = faculty_chat_label(faculty_id)
-    body = f"Дежурный по {label} строевку скинул."
+    body = f"Дежурный по {label} отправил строевую записку."
     await post_dpa_chat_message(
         session,
         sender_name=user.display_name,
@@ -155,7 +160,7 @@ async def notify_dpf_stroevka_updated(
     if user.post_type != DutyPostType.DPF.value:
         return
     label = faculty_chat_label(faculty_id)
-    body = f"Дежурный по {label} строевку обновил."
+    body = f"Дежурный по {label} обновил строевую записку."
     await post_dpa_chat_message(
         session,
         sender_name=user.display_name,

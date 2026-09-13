@@ -62,7 +62,9 @@ class FacultyCreate(BaseModel):
 class CourseCreate(BaseModel):
     faculty_number: int = Field(ge=1, le=99, description="Номер факультета")
     course_number: int = Field(ge=1, le=5, description="Год обучения 1–5")
-    location_id: int = Field(description="id расположения: 1001 Академия, 1002 Пушкин, 1003 Лехтуси")
+    location_id: int = Field(
+        description="id расположения: 1001 Академия, 1002 ВГ №6 (Пушкин), 1003 ВГ №61 (Лехтуси)"
+    )
 
 
 class CourseMove(BaseModel):
@@ -280,10 +282,14 @@ class AttendanceSnapshot(BaseModel):
     people: list[PersonAttendanceRow] = []
     departments: list[DepartmentStroevkaSummary] = []
     report_status: ReportStatus | None = None
+    report_submitted_at: datetime | None = None
     editable: bool = True
     changes_pending_dpf: bool = False
     changes_pending_dpa: bool = False
     is_editing: bool = False
+    dpf_landline: str | None = None
+    dpa_landline: str | None = None
+    faculty_chief_landline: str | None = None
 
 
 class CourseStroevkaSummary(BaseModel):
@@ -304,6 +310,7 @@ class FacultyStroevkaBundle(BaseModel):
     has_pending_for_dpf: bool = False
     has_pending_for_dpa: bool = False
     faculty_report_status: ReportStatus | None = None
+    faculty_report_submitted_at: datetime | None = None
     is_editing: bool = False
     submit_blockers: list[str] = []
 
@@ -590,10 +597,31 @@ class DutyPostClearRegistrationResult(BaseModel):
     message: str
 
 
-class LandlinePhone(BaseModel):
-    id: int = 0
+class LandlinePhoneCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(default="", max_length=64)
+    sort_order: int = 0
+    duty_scope: str | None = Field(default=None, pattern="^(dpa|dpf|faculty_chief)$")
+    faculty_id: int | None = None
+
+
+class LandlinePhoneUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=64)
+    sort_order: int | None = None
+    is_active: bool | None = None
+    duty_scope: str | None = Field(default=None, pattern="^(dpa|dpf|faculty_chief)$")
+    faculty_id: int | None = None
+
+
+class LandlinePhoneRead(ORMModel):
+    id: int
+    name: str
+    phone: str
+    sort_order: int
+    is_active: bool
+    duty_scope: str | None = None
+    faculty_id: int | None = None
 
 
 # --- Audit ---

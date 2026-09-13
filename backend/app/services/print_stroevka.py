@@ -1,16 +1,19 @@
 """HTML-печать развёрнутой строевой записки (свод + список отсутствующих)."""
 
 from datetime import date
+from html import escape
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ABSENCE_CATEGORY_DEFS, AbsenceCategoryCode, UnitType
+from app.core.enums import ABSENCE_CATEGORY_DEFS, AbsenceCategoryCode, DutyPostType, UnitType
 from app.models import Unit
 from app.schemas import AbsenceEntryRead, AttendanceAggregate
 from app.services.attendance import compute_aggregate_for_unit, get_attendance_snapshot, _normalize_code
+from app.services.duty_contacts import get_duty_contact_on_date
 from app.services.org import get_courses_for_faculty, get_courses_for_location
-from app.services.unit_ids import parse_course_id
+from app.services.people import format_rank
+from app.services.unit_ids import LOCATION_ACADEMY
 
 ACADEMY_TITLE = "Военно-космической академии имени А.Ф. Можайского"
 
@@ -100,14 +103,7 @@ def _total_aggregate(rows: list[tuple[str, AttendanceAggregate]]) -> AttendanceA
 
 def _subtitle_for_unit(unit: Unit, report_date: date) -> str:
     if unit.type == UnitType.COURSE:
-        try:
-            fac_num, course_num = parse_course_id(unit.id)
-            return (
-                f"{course_num} курса {fac_num} факультета {ACADEMY_TITLE} "
-                f"на {_format_date_ru(report_date)}"
-            )
-        except ValueError:
-            pass
+        return f"{unit.name} {ACADEMY_TITLE} на {_format_date_ru(report_date)}"
     if unit.type == UnitType.FACULTY:
         return f"{unit.name} {ACADEMY_TITLE} на {_format_date_ru(report_date)}"
     if unit.type == UnitType.LOCATION:
@@ -117,6 +113,166 @@ def _subtitle_for_unit(unit: Unit, report_date: date) -> str:
 
 def _subtitle_academy(report_date: date) -> str:
     return f"{ACADEMY_TITLE} на {_format_date_ru(report_date)}"
+
+
+_PRINT_PAGE_STYLE = """
+    @page { size: A4 landscape; margin: 0; }
+    html, body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      margin: 0;
+      padding: 0;
+    }
+    @media print {
+      body { padding: 1.5cm; }
+    }
+    @media screen {
+      body { padding: 1cm; }
+    }
+    h1 {
+      text-align: center;
+      font-size: 14pt;
+      font-weight: bold;
+      margin: 0 0 0.5em;
+      text-transform: uppercase;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 12pt;
+      margin: 0 0 1.2em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11pt;
+      margin-bottom: 1.5em;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 3px 5px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th { font-weight: normal; }
+    .duty-sign-footer {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1.5em;
+      margin-top: 2.5em;
+      font-size: 12pt;
+      page-break-inside: avoid;
+    }
+    .duty-sign-left,
+    .duty-sign-right {
+      flex: 1 1 32%;
+    }
+    .duty-sign-right {
+      text-align: right;
+    }
+    .duty-sign-center {
+      flex: 1 1 28%;
+      text-align: center;
+    }
+    .duty-sign-line {
+      display: block;
+      border-bottom: 1px solid #000;
+      min-width: 9em;
+      height: 1.25em;
+      margin: 0 auto;
+    }
+    .duty-sign-caption {
+      display: block;
+      font-size: 10pt;
+      color: #444;
+      margin-top: 0.2em;
+    }
+"""
+
+_PRINT_TOOLBAR_STYLE = """
+    .print-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.2em;
+      gap: 1em;
+    }
+    .print-toolbar button {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      padding: 8px 18px;
+      cursor: pointer;
+      border: 1px solid #2A3F5F;
+      border-radius: 6px;
+      background: #fff;
+      color: #2A3F5F;
+    }
+    .print-toolbar button:hover { background: #f3f5f8; }
+    .print-toolbar button.primary {
+      background: #2A3F5F;
+      color: #fff;
+    }
+    .print-toolbar button.primary:hover { background: #54657F; }
+    @media print { .no-print { display: none !important; } }
+"""
+
+_PRINT_TOOLBAR_HTML = """
+  <div class="print-toolbar no-print">
+    <button type="button" onclick="returnToApp()">Назад</button>
+    <button type="button" class="primary" onclick="printDocument()">Печать</button>
+  </div>
+  <script>
+    function returnToApp() {
+      if (window.opener && !window.opener.closed) {
+        window.opener.focus();
+        window.close();
+        return;
+      }
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+      window.close();
+    }
+    function printDocument() {
+      var previousTitle = document.title;
+      document.title = " ";
+      window.print();
+      document.title = previousTitle;
+    }
+  </script>
+"""
+
+
+def _duty_officer_line(rank: str | None, full_name: str | None) -> str:
+    parts = [p for p in [(rank or "").strip(), (full_name or "").strip()] if p]
+    return " ".join(parts) if parts else "—"
+
+
+def _duty_sign_footer_html(left_label: str, rank: str | None, full_name: str | None) -> str:
+    officer = escape(_duty_officer_line(rank, full_name))
+    return f"""
+  <div class="duty-sign-footer">
+    <div class="duty-sign-left">{escape(left_label)}</div>
+    <div class="duty-sign-center">
+      <span class="duty-sign-line"></span>
+      <span class="duty-sign-caption">(подпись)</span>
+    </div>
+    <div class="duty-sign-right">{officer}</div>
+  </div>"""
+
+
+async def _duty_sign_footer(
+    session: AsyncSession,
+    report_date: date,
+    unit_id: int,
+    post_type: DutyPostType,
+    left_label: str,
+) -> str:
+    contact = await get_duty_contact_on_date(session, report_date, unit_id, post_type)
+    rank = format_rank(contact.rank) if contact and contact.rank else None
+    full_name = (contact.full_name or "").strip() if contact else None
+    return _duty_sign_footer_html(left_label, rank, full_name)
 
 
 async def _summary_rows_for_units(
@@ -151,7 +307,13 @@ async def _absences_for_units(
     return result
 
 
-def _build_html(subtitle: str, summary_rows: list[tuple[str, AttendanceAggregate]], absences: list[tuple[str, AbsenceEntryRead]]) -> str:
+def _build_html(
+    subtitle: str,
+    summary_rows: list[tuple[str, AttendanceAggregate]],
+    absences: list[tuple[str, AbsenceEntryRead]],
+    *,
+    duty_footer: str = "",
+) -> str:
     summary_body = ""
     for i, (name, agg) in enumerate(summary_rows, 1):
         summary_body += _summary_row(i, name, agg)
@@ -181,20 +343,14 @@ def _build_html(subtitle: str, summary_rows: list[tuple[str, AttendanceAggregate
 <html lang="ru">
 <head>
   <meta charset="utf-8"/>
-  <title>Развёрнутая строевая записка</title>
+  <title></title>
   <style>
-    @page {{ size: A4 landscape; margin: 1.5cm; }}
-    body {{ font-family: 'Times New Roman', Times, serif; font-size: 12pt; margin: 0; padding: 1cm; }}
-    h1 {{ text-align: center; font-size: 14pt; font-weight: bold; margin: 0 0 0.5em; text-transform: uppercase; }}
-    .subtitle {{ text-align: center; font-size: 12pt; margin: 0 0 1.2em; }}
-    table {{ width: 100%; border-collapse: collapse; font-size: 11pt; margin-bottom: 1.5em; }}
-    th, td {{ border: 1px solid #000; padding: 3px 5px; text-align: center; vertical-align: middle; }}
-    th {{ font-weight: normal; }}
-    .no-print {{ margin-top: 1em; }}
-    @media print {{ .no-print {{ display: none; }} }}
+    {_PRINT_PAGE_STYLE}
+    {_PRINT_TOOLBAR_STYLE}
   </style>
 </head>
 <body>
+  {_PRINT_TOOLBAR_HTML}
   <h1>Развёрнутая строевая записка</h1>
   <p class="subtitle">{subtitle}</p>
 
@@ -232,8 +388,7 @@ def _build_html(subtitle: str, summary_rows: list[tuple[str, AttendanceAggregate
     <tbody>{absence_body}
     </tbody>
   </table>
-
-  <button class="no-print" type="button" onclick="window.print()">Печать</button>
+  {duty_footer}
 </body>
 </html>"""
 
@@ -263,6 +418,8 @@ def _build_category_html(
     category_label: str,
     summary_counts: list[tuple[str, int]],
     absences: list[tuple[str, AbsenceEntryRead]],
+    *,
+    duty_footer: str = "",
 ) -> str:
     summary_body = ""
     total = 0
@@ -309,20 +466,14 @@ def _build_category_html(
 <html lang="ru">
 <head>
   <meta charset="utf-8"/>
-  <title>Расход по причине отсутствия</title>
+  <title></title>
   <style>
-    @page {{ size: A4 landscape; margin: 1.5cm; }}
-    body {{ font-family: 'Times New Roman', Times, serif; font-size: 12pt; margin: 0; padding: 1cm; }}
-    h1 {{ text-align: center; font-size: 14pt; font-weight: bold; margin: 0 0 0.5em; text-transform: uppercase; }}
-    .subtitle {{ text-align: center; font-size: 12pt; margin: 0 0 1.2em; }}
-    table {{ width: 100%; border-collapse: collapse; font-size: 11pt; margin-bottom: 1.5em; }}
-    th, td {{ border: 1px solid #000; padding: 3px 5px; text-align: center; vertical-align: middle; }}
-    th {{ font-weight: normal; }}
-    .no-print {{ margin-top: 1em; }}
-    @media print {{ .no-print {{ display: none; }} }}
+    {_PRINT_PAGE_STYLE}
+    {_PRINT_TOOLBAR_STYLE}
   </style>
 </head>
 <body>
+  {_PRINT_TOOLBAR_HTML}
   <h1>Расход по причине отсутствия: {category_label}</h1>
   <p class="subtitle">{subtitle}</p>
 
@@ -352,8 +503,7 @@ def _build_category_html(
     <tbody>{absence_body}
     </tbody>
   </table>
-
-  <button class="no-print" type="button" onclick="window.print()">Печать</button>
+  {duty_footer}
 </body>
 </html>"""
 
@@ -394,7 +544,16 @@ async def build_stroevka_print(
             filtered = _filter_absences_by_category(all_absences, category)
             summary_counts = _category_summary_from_absences(filtered)
             subtitle = _subtitle_academy(report_date)
-            return _build_category_html(subtitle, category_label, summary_counts, filtered)
+            dpa_footer = await _duty_sign_footer(
+                session,
+                report_date,
+                LOCATION_ACADEMY,
+                DutyPostType.DPA,
+                "Дежурный по академии",
+            )
+            return _build_category_html(
+                subtitle, category_label, summary_counts, filtered, duty_footer=dpa_footer
+            )
 
         unit = await session.get(Unit, unit_id)
         if not unit:
@@ -404,17 +563,27 @@ async def build_stroevka_print(
             courses = await get_courses_for_faculty(session, unit_id)
             unit_ids = [c.id for c in courses] + [unit_id]
             subtitle = _subtitle_for_unit(unit, report_date)
+            duty_footer = await _duty_sign_footer(
+                session,
+                report_date,
+                unit_id,
+                DutyPostType.DPF,
+                f"Дежурный по {unit_id} факультету",
+            )
         elif scope == "location":
             courses = await get_courses_for_location(session, unit_id)
             unit_ids = [c.id for c in courses]
             subtitle = _subtitle_for_unit(unit, report_date)
+            duty_footer = ""
         else:
             raise ValueError("Для отчёта по причине укажите scope academy, faculty или location")
 
         all_absences = await _absences_for_units(session, unit_ids, report_date)
         filtered = _filter_absences_by_category(all_absences, category)
         summary_counts = _category_summary_from_absences(filtered)
-        return _build_category_html(subtitle, category_label, summary_counts, filtered)
+        return _build_category_html(
+            subtitle, category_label, summary_counts, filtered, duty_footer=duty_footer
+        )
 
     if scope == "academy":
         fac_result = await session.execute(
@@ -432,7 +601,19 @@ async def build_stroevka_print(
             )
             summary_rows.extend(fac_rows)
         absences = await _absences_for_units(session, unit_ids, report_date)
-        return _build_html(_subtitle_academy(report_date), summary_rows, absences)
+        dpa_footer = await _duty_sign_footer(
+            session,
+            report_date,
+            LOCATION_ACADEMY,
+            DutyPostType.DPA,
+            "Дежурный по академии",
+        )
+        return _build_html(
+            _subtitle_academy(report_date),
+            summary_rows,
+            absences,
+            duty_footer=dpa_footer,
+        )
 
     unit = await session.get(Unit, unit_id)
     if not unit:
@@ -442,7 +623,19 @@ async def build_stroevka_print(
         agg = await compute_aggregate_for_unit(session, unit_id, report_date)
         summary_rows = [(unit.name, agg)]
         absences = await _absences_for_units(session, [unit_id], report_date)
-        return _build_html(_subtitle_for_unit(unit, report_date), summary_rows, absences)
+        dpk_footer = await _duty_sign_footer(
+            session,
+            report_date,
+            unit_id,
+            DutyPostType.DPK,
+            f"Дежурный по {unit_id} курсу",
+        )
+        return _build_html(
+            _subtitle_for_unit(unit, report_date),
+            summary_rows,
+            absences,
+            duty_footer=dpk_footer,
+        )
 
     if scope == "faculty":
         courses = await get_courses_for_faculty(session, unit_id)
@@ -451,7 +644,19 @@ async def build_stroevka_print(
         )
         unit_ids = [c.id for c in courses] + [unit_id]
         absences = await _absences_for_units(session, unit_ids, report_date)
-        return _build_html(_subtitle_for_unit(unit, report_date), summary_rows, absences)
+        dpf_footer = await _duty_sign_footer(
+            session,
+            report_date,
+            unit_id,
+            DutyPostType.DPF,
+            f"Дежурный по {unit_id} факультету",
+        )
+        return _build_html(
+            _subtitle_for_unit(unit, report_date),
+            summary_rows,
+            absences,
+            duty_footer=dpf_footer,
+        )
 
     if scope == "location":
         courses = await get_courses_for_location(session, unit_id)

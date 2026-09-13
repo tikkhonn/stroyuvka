@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChessboardResponse, ChessboardRow, ChessboardSickByHospital, ChessboardSickEntry, ChessboardSickSummary, api } from "../api/client";
 import { todayLocal } from "../utils/date";
-import { StatusBadge } from "../components/StatusBadge";
+import { ReportPipelineBar } from "../components/ReportPipelineBar";
 import { aggregateCellClass } from "../components/SummaryCards";
 import { formatAbsenceName } from "../constants/ranks";
 import { absenceCategoryTextClass } from "../constants/absenceCategories";
+import { KNOWN_LOCATIONS } from "../constants/locations";
 
 type View = "faculty" | "location";
 type PanelFilter = "all" | "sick" | number;
@@ -22,16 +23,52 @@ const COLS = [
   { key: "arrest", label: "Арест" },
 ] as const;
 
-const KNOWN_LOCATIONS: { id: number; name: string }[] = [
-  { id: 1001, name: "Академия" },
-  { id: 1002, name: "Пушкин" },
-  { id: 1003, name: "Лехтуси" },
-];
+const FACULTY_BAND_CLASSES = [
+  "border-l-4 border-amber-500 bg-amber-50/80",
+  "border-l-4 border-sky-500 bg-sky-50/70",
+  "border-l-4 border-emerald-500 bg-emerald-50/70",
+  "border-l-4 border-violet-500 bg-violet-50/70",
+  "border-l-4 border-rose-500 bg-rose-50/70",
+  "border-l-4 border-cyan-500 bg-cyan-50/70",
+  "border-l-4 border-orange-500 bg-orange-50/70",
+  "border-l-4 border-teal-500 bg-teal-50/70",
+  "border-l-4 border-fuchsia-500 bg-fuchsia-50/70",
+] as const;
+
+function facultyBandClass(facultyId: number): string {
+  if (facultyId < 1) return "border-l-4 border-gray-400 bg-gray-50/70";
+  return FACULTY_BAND_CLASSES[(facultyId - 1) % FACULTY_BAND_CLASSES.length];
+}
+
+type FacultyBlock = {
+  facultyId: number;
+  facultyName: string;
+  rows: ChessboardRow[];
+};
+
+function groupRowsByFaculty(rows: ChessboardRow[]): FacultyBlock[] {
+  const blocks: FacultyBlock[] = [];
+  for (const row of rows) {
+    if (row.row_kind !== "course" && row.row_kind !== "officers") continue;
+    const last = blocks[blocks.length - 1];
+    if (!last || last.facultyId !== row.faculty_id) {
+      blocks.push({
+        facultyId: row.faculty_id,
+        facultyName: row.faculty_name,
+        rows: [row],
+      });
+    } else {
+      last.rows.push(row);
+    }
+  }
+  return blocks;
+}
 
 type LocationSection = {
   locationId: number;
   locationName: string;
-  courses: ChessboardRow[];
+  dataRows: ChessboardRow[];
+  facultyBlocks: FacultyBlock[];
   total: ChessboardRow | null;
 };
 
@@ -42,7 +79,8 @@ function buildLocationSections(rows: ChessboardRow[]): LocationSection[] {
     byId.set(loc.id, {
       locationId: loc.id,
       locationName: loc.name,
-      courses: [],
+      dataRows: [],
+      facultyBlocks: [],
       total: null,
     });
   }
@@ -57,7 +95,8 @@ function buildLocationSections(rows: ChessboardRow[]): LocationSection[] {
       section = {
         locationId: locId,
         locationName: row.location_name || String(locId),
-        courses: [],
+        dataRows: [],
+        facultyBlocks: [],
         total: null,
       };
       byId.set(locId, section);
@@ -66,13 +105,25 @@ function buildLocationSections(rows: ChessboardRow[]): LocationSection[] {
     if (row.row_kind === "location_total") {
       section.total = row;
       if (row.location_name) section.locationName = row.location_name;
-    } else if (row.row_kind === "course") {
-      section.courses.push(row);
+    } else if (row.row_kind === "course" || row.row_kind === "officers") {
+      section.dataRows.push(row);
       if (row.location_name) section.locationName = row.location_name;
     }
   }
 
+  for (const section of byId.values()) {
+    section.facultyBlocks = groupRowsByFaculty(section.dataRows);
+  }
+
   return KNOWN_LOCATIONS.map((loc) => byId.get(loc.id)!);
+}
+
+function buildFacultySections(rows: ChessboardRow[]): FacultyBlock[] {
+  return groupRowsByFaculty(rows);
+}
+
+function countCourses(rows: ChessboardRow[]): number {
+  return rows.filter((r) => r.row_kind === "course").length;
 }
 
 function academyTotalRow(rows: ChessboardRow[]): ChessboardRow | null {
@@ -264,22 +315,44 @@ export function ChessboardPage() {
 
   const academyTotal = useMemo(() => academyTotalRow(rows), [rows]);
 
+  const facultySections = useMemo(
+    () => (view === "faculty" ? buildFacultySections(rows) : []),
+    [rows, view]
+  );
+
   const visibleSections = useMemo(() => {
     if (view !== "location") return [];
     if (panelFilter === "all" || panelFilter === "sick") return locationSections;
     return locationSections.filter((s) => s.locationId === panelFilter);
   }, [view, panelFilter, locationSections]);
 
-  const tableColCount =
-    view === "location" ? COLS.length + 4 : COLS.length + 4;
+  const facultyTableColCount = COLS.length + 3;
+  const locationTableColCount =
+    panelFilter === "all" ? COLS.length + 2 : COLS.length + 3;
 
-  const rowClass = (row: ChessboardRow) => {
-    if (row.row_kind === "academy_total") return "bg-vka-navy/15 font-bold border-t-2 border-vka-navy";
-    if (row.row_kind === "location_total")
-      return "bg-vka-navy/8 font-semibold border-t-2 border-vka-navy/40";
-    if (row.is_officers || row.row_kind === "officers") return "bg-amber-50 font-medium";
-    if (row.changes_pending_dpa || row.changes_pending_dpf) return "bg-amber-50";
-    return undefined;
+  const rowClass = (row: ChessboardRow, facultyId?: number) => {
+    const parts: string[] = [];
+    if (row.row_kind === "academy_total") {
+      parts.push("bg-vka-navy/15 font-bold border-t-2 border-vka-navy");
+    } else if (row.row_kind === "location_total") {
+      parts.push("bg-vka-navy/8 font-semibold border-t-2 border-vka-navy/40");
+    } else if (row.is_officers || row.row_kind === "officers") {
+      parts.push("font-medium");
+    } else if (row.changes_pending_dpa || row.changes_pending_dpf) {
+      parts.push("bg-amber-50");
+    }
+    if (facultyId != null && facultyId > 0) {
+      parts.push(facultyBandClass(facultyId));
+    }
+    return parts.length ? parts.join(" ") : undefined;
+  };
+
+  const locationSectionRowCount = (section: LocationSection) => {
+    const blockRows = section.facultyBlocks.reduce(
+      (sum, block) => sum + 1 + block.rows.length,
+      0
+    );
+    return blockRows + (section.total ? 1 : 0);
   };
 
   const renderDataCells = (row: ChessboardRow) => (
@@ -291,7 +364,7 @@ export function ChessboardPage() {
       ))}
       <td>
         {row.row_kind === "course" || row.row_kind === "officers" || row.is_officers ? (
-          <StatusBadge status={row.status} />
+          <ReportPipelineBar status={row.status} isOfficers={row.is_officers} />
         ) : (
           "—"
         )}
@@ -376,7 +449,7 @@ export function ChessboardPage() {
                       </div>
                       <div className="font-semibold text-base">{section.locationName}</div>
                       <div className={`text-xs mt-1 ${active ? "text-white/90" : "text-gray-500"}`}>
-                        {section.courses.length} курс.
+                        {countCourses(section.dataRows)} курс.
                         {total ? ` · налицо ${total.present} / ${total.total_list}` : ""}
                       </div>
                     </button>
@@ -421,8 +494,7 @@ export function ChessboardPage() {
           <table className="vka-table w-full min-w-[1240px]">
             <thead>
               <tr>
-                <th>Расположение</th>
-                <th>Факультет</th>
+                {panelFilter !== "all" ? <th>Расположение</th> : null}
                 <th>Курс</th>
                 {COLS.map((c) => (
                   <th key={c.key}>{c.label}</th>
@@ -431,69 +503,80 @@ export function ChessboardPage() {
               </tr>
             </thead>
             <tbody>
-              {visibleSections.map((section) => (
-                <Fragment key={section.locationId}>
-                  {panelFilter === "all" && (
-                    <tr key={`hdr-${section.locationId}`} className="bg-vka-navy/5">
-                      <td
-                        colSpan={tableColCount}
-                        className="py-2 px-3 font-serif font-bold text-vka-navy text-sm uppercase tracking-wide border-y border-vka-navy/20"
-                      >
-                        {section.locationName}
-                        <span className="ml-2 font-normal normal-case text-gray-600">
-                          ({section.courses.length}{" "}
-                          {section.courses.length === 1 ? "курс" : "курсов"})
-                        </span>
-                      </td>
-                    </tr>
-                  )}
-                  {section.courses.length === 0 && !section.total ? (
-                    <tr key={`empty-${section.locationId}`}>
-                      <td colSpan={tableColCount} className="text-center text-gray-400 py-3">
-                        В расположении «{section.locationName}» нет курсов
-                      </td>
-                    </tr>
-                  ) : (
-                    section.courses.map((row, idx) => (
-                      <tr key={`${section.locationId}-${row.course_id}-${idx}`} className={rowClass(row)}>
-                        {idx === 0 && panelFilter === "all" ? (
-                          <td rowSpan={section.courses.length + (section.total ? 1 : 0)}>
+              {visibleSections.map((section) => {
+                const sectionRows = locationSectionRowCount(section);
+
+                return (
+                  <Fragment key={section.locationId}>
+                    {panelFilter === "all" && (
+                      <tr key={`hdr-${section.locationId}`} className="bg-vka-navy/5">
+                        <td
+                          colSpan={locationTableColCount}
+                          className="py-2 px-3 font-serif font-bold text-vka-navy text-sm uppercase tracking-wide border-y border-vka-navy/20"
+                        >
+                          {section.locationName}
+                          <span className="ml-2 font-normal normal-case text-gray-600">
+                            ({countCourses(section.dataRows)}{" "}
+                            {countCourses(section.dataRows) === 1 ? "курс" : "курсов"})
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    {section.dataRows.length === 0 && !section.total ? (
+                      <tr key={`empty-${section.locationId}`}>
+                        <td colSpan={locationTableColCount} className="text-center text-gray-400 py-3">
+                          В расположении «{section.locationName}» нет курсов
+                        </td>
+                      </tr>
+                    ) : (
+                      section.facultyBlocks.map((block, blockIdx) => (
+                        <Fragment key={`${section.locationId}-fac-${block.facultyId}`}>
+                          <tr className={facultyBandClass(block.facultyId)}>
+                            {panelFilter !== "all" && blockIdx === 0 ? (
+                              <td rowSpan={sectionRows}>
+                                <span className="font-medium">{section.locationName}</span>
+                              </td>
+                            ) : null}
+                            <td
+                              colSpan={locationTableColCount - (panelFilter !== "all" ? 1 : 0)}
+                              className="py-1.5 px-3 font-semibold text-vka-navy text-sm border-b border-black/5"
+                            >
+                              {block.facultyName}
+                            </td>
+                          </tr>
+                          {block.rows.map((row, idx) => (
+                            <tr
+                              key={`${section.locationId}-${block.facultyId}-${row.course_id ?? "off"}-${idx}`}
+                              className={rowClass(row, block.facultyId)}
+                            >
+                              <td>
+                                {row.course_name || "—"}
+                                {row.changes_pending_dpa ? " ⚠" : ""}
+                              </td>
+                              {renderDataCells(row)}
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))
+                    )}
+                    {section.total ? (
+                      <tr key={`total-${section.locationId}`} className={rowClass(section.total)}>
+                        {panelFilter !== "all" && section.dataRows.length === 0 ? (
+                          <td>
                             <span className="font-medium">{section.locationName}</span>
                           </td>
-                        ) : panelFilter !== "all" && typeof panelFilter === "number" ? (
-                          idx === 0 ? (
-                            <td rowSpan={section.courses.length + (section.total ? 1 : 0)}>
-                              <span className="font-medium">{section.locationName}</span>
-                            </td>
-                          ) : null
                         ) : null}
-                        <td>{row.faculty_name}</td>
-                        <td>
-                          {row.course_name || "—"}
-                          {row.changes_pending_dpa ? " ⚠" : ""}
-                        </td>
-                        {renderDataCells(row)}
+                        <td className="font-semibold">Итого: {section.locationName}</td>
+                        {renderDataCells(section.total)}
                       </tr>
-                    ))
-                  )}
-                  {section.total ? (
-                    <tr key={`total-${section.locationId}`} className={rowClass(section.total)}>
-                      {section.courses.length === 0 ? (
-                        <td>
-                          <span className="font-medium">{section.locationName}</span>
-                        </td>
-                      ) : null}
-                      <td colSpan={2} className="font-semibold">
-                        Итого: {section.locationName}
-                      </td>
-                      {renderDataCells(section.total)}
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
+                    ) : null}
+                  </Fragment>
+                );
+              })}
               {academyTotal && (panelFilter === "all" || visibleSections.length > 0) ? (
                 <tr className={rowClass(academyTotal)}>
-                  <td colSpan={3} className="font-bold">
+                  {panelFilter !== "all" ? <td /> : null}
+                  <td className="font-bold">
                     {academyTotal.course_name || "Вся академия"}
                   </td>
                   {renderDataCells(academyTotal)}
@@ -507,7 +590,6 @@ export function ChessboardPage() {
           <table className="vka-table w-full min-w-[1240px]">
             <thead>
               <tr>
-                <th>Факультет</th>
                 <th>Курс</th>
                 <th>Расположение</th>
                 {COLS.map((c) => (
@@ -517,16 +599,30 @@ export function ChessboardPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className={rowClass(row)}>
-                  <td>{row.faculty_name}</td>
-                  <td>
-                    {row.course_name || "—"}
-                    {row.changes_pending_dpa ? " ⚠" : ""}
-                  </td>
-                  <td>{row.location_name || "—"}</td>
-                  {renderDataCells(row)}
-                </tr>
+              {facultySections.map((block) => (
+                <Fragment key={`fac-${block.facultyId}`}>
+                  <tr className={facultyBandClass(block.facultyId)}>
+                    <td
+                      colSpan={facultyTableColCount}
+                      className="py-1.5 px-3 font-semibold text-vka-navy text-sm border-b border-black/5"
+                    >
+                      {block.facultyName}
+                    </td>
+                  </tr>
+                  {block.rows.map((row, idx) => (
+                    <tr
+                      key={`${block.facultyId}-${row.course_id ?? "off"}-${idx}`}
+                      className={rowClass(row, block.facultyId)}
+                    >
+                      <td>
+                        {row.course_name || "—"}
+                        {row.changes_pending_dpa ? " ⚠" : ""}
+                      </td>
+                      <td>{row.location_name || "—"}</td>
+                      {renderDataCells(row)}
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

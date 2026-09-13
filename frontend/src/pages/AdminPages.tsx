@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AuditEntry, UnitNode, UnitRead, api } from "../api/client";
+import { courseDisplayName, parseCourseId } from "../lib/courseId";
 
 const TYPE_LABELS: Record<string, string> = {
   location: "расположение",
@@ -9,9 +10,8 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 function courseMeta(id: number) {
-  const faculty = Math.floor(id / 10);
-  const course = id % 10;
-  return { faculty, course, label: `${faculty} фак, ${course} курс` };
+  const { faculty, course } = parseCourseId(id);
+  return { faculty, course, label: courseDisplayName(id) };
 }
 
 type TreeView = "location" | "faculty";
@@ -362,8 +362,9 @@ export function AdminUnitsPage() {
     <div>
       <h2 className="text-xl font-serif font-bold text-vka-navy mb-2">ОШС</h2>
       <p className="text-sm text-gray-600 mb-4">
-        ID курса = факультет × 10 + год (14 = 1 фак, 4 курс). Расположения:{" "}
-        <strong>1001 Академия</strong>, 1002 Пушкин, 1003 Лехтуси. Факультет без расположения;
+        ID курса = факультет × 10 + год (14 = 14 курс, 63 = 63 курс). Расположения:{" "}
+        <strong>1001 Академия</strong>, 1002 ВГ №6 (Пушкин), 1003 ВГ №61 (Лехтуси). Факультет без
+        расположения;
         курс привязан к расположению. Расход факта = все его курсы; расположения — отдельный
         срез; «вся академия» = все курсы + офицеры.
       </p>

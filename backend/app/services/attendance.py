@@ -8,10 +8,20 @@ from app.core.enums import (
     ABSENCE_CATEGORY_DEFS,
     DETAIL_REQUIRED_CODES,
     AbsenceCategoryCode,
+    DutyPostType,
     ReportStatus,
     UnitType,
 )
-from app.models import AbsenceCategory, AbsenceEntry, CourseReport, FacultyReport, Hospital, Person, Unit
+from app.models import (
+    AbsenceCategory,
+    AbsenceEntry,
+    CourseReport,
+    DutyPost,
+    FacultyReport,
+    Hospital,
+    Person,
+    Unit,
+)
 from app.schemas import (
     AbsenceEntryCreate,
     AbsenceEntryPatch,
@@ -194,6 +204,10 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
         session.add(Hospital(name="Медпункт", sort_order=0, is_active=True))
         session.add(Hospital(name="Госпиталь", sort_order=1, is_active=True))
 
+    from app.services.landline_phones import ensure_landline_phones_table
+
+    await ensure_landline_phones_table(session)
+
     arrest_cat = await session.scalar(
         select(AbsenceCategory).where(AbsenceCategory.code == "arrest")
     )
@@ -201,6 +215,36 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
         session.add(
             AbsenceCategory(code=AbsenceCategoryCode.ARREST, label="Арест", sort_order=8)
         )
+
+    from app.services.unit_ids import LOCATION_NAMES, course_display_name, parse_course_id
+
+    for loc_id, loc_name in LOCATION_NAMES.items():
+        loc = await session.get(Unit, loc_id)
+        if loc and loc.name != loc_name:
+            loc.name = loc_name
+
+    courses = await session.execute(
+        select(Unit).where(Unit.type == UnitType.COURSE, Unit.is_active.is_(True))
+    )
+    for unit in courses.scalars():
+        try:
+            faculty_number, course_number = parse_course_id(unit.id)
+        except ValueError:
+            continue
+        new_name = course_display_name(faculty_number, course_number)
+        if unit.name != new_name:
+            unit.name = new_name
+        dpk = await session.scalar(
+            select(DutyPost).where(
+                DutyPost.unit_id == unit.id,
+                DutyPost.post_type == DutyPostType.DPK,
+            )
+        )
+        if dpk:
+            dpk_name = f"ДПК — {new_name}"
+            if dpk.name != dpk_name:
+                dpk.name = dpk_name
+
     await session.flush()
 
 
@@ -637,12 +681,14 @@ async def get_attendance_snapshot(
     aggregate = aggregate_from_entries(total, entries)
 
     report_status = None
+    report_submitted_at = None
     changes_pending_dpf = False
     changes_pending_dpa = False
     is_editing = False
     if unit.type == UnitType.COURSE:
         report = await _get_or_create_course_report(session, unit_id, report_date)
         report_status = report.status
+        report_submitted_at = report.submitted_at
         changes_pending_dpf = bool(report.changes_pending_dpf)
         changes_pending_dpa = bool(report.changes_pending_dpa)
         is_editing = bool(report.is_editing)
@@ -650,6 +696,7 @@ async def get_attendance_snapshot(
         fac_report = await _get_faculty_report(session, unit_id, report_date)
         if fac_report:
             report_status = fac_report.status
+            report_submitted_at = fac_report.approved_at
             is_editing = bool(fac_report.is_editing)
 
     by_person = {e.person_id: e for e in entries if e.person_id}
@@ -674,6 +721,20 @@ async def get_attendance_snapshot(
             session, unit_id, entries, editable
         )
 
+    dpf_landline: str | None = None
+    dpa_landline: str | None = None
+    faculty_chief_landline: str | None = None
+    if unit.type == UnitType.COURSE:
+        from app.services.landline_phones import duty_landlines_for_course
+
+        dpf_landline, dpa_landline = await duty_landlines_for_course(session, unit_id)
+    elif unit.type == UnitType.FACULTY:
+        from app.services.landline_phones import duty_landlines_for_faculty
+
+        faculty_chief_landline, dpa_landline = await duty_landlines_for_faculty(
+            session, unit_id
+        )
+
     return AttendanceSnapshot(
         unit_id=unit_id,
         unit_name=unit.name,
@@ -684,10 +745,14 @@ async def get_attendance_snapshot(
         people=people_rows,
         departments=departments,
         report_status=report_status,
+        report_submitted_at=report_submitted_at,
         editable=editable,
         changes_pending_dpf=changes_pending_dpf,
         changes_pending_dpa=changes_pending_dpa,
         is_editing=is_editing,
+        dpf_landline=dpf_landline,
+        dpa_landline=dpa_landline,
+        faculty_chief_landline=faculty_chief_landline,
     )
 
 

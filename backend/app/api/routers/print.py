@@ -40,14 +40,14 @@ async def stroevaya(
         raise HTTPException(400, "Неизвестная причина отсутствия")
     if user.post_type == DutyPostType.DPK.value or user.role == "dpk":
         if scope != "unit":
-            raise HTTPException(403, "ДПК может печатать только строевку своего курса")
+            raise HTTPException(403, "ДПК может печатать только строевую записку своего курса")
         if user.unit_id is None:
             raise HTTPException(403, "Нет привязки к курсу")
         unit_id = user.unit_id
 
     if user.post_type == DutyPostType.DPF.value or user.role == "dpf":
         if scope != "faculty":
-            raise HTTPException(403, "ДПФ может печатать только строевку своего факультета")
+            raise HTTPException(403, "ДПФ может печатать только строевую записку своего факультета")
         if user.unit_id is None:
             raise HTTPException(403, "Нет привязки к факультету")
         unit_id = user.unit_id

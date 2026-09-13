@@ -153,6 +153,18 @@ class Hospital(Base):
     )
 
 
+class LandlinePhone(Base):
+    __tablename__ = "landline_phones"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str] = mapped_column(String(64), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    duty_scope: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    faculty_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
+
+
 class UnitStrength(Base):
     """Численность «по списку» для курса или факультета (офицеры). Помнится между днями."""
 

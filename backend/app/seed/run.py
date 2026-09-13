@@ -103,7 +103,7 @@ async def seed_if_empty() -> None:
                 username="nachalnik",
                 password_hash=hash_password(DEMO_CHIEF_PASSWORD),
                 role=UserRole.CHIEF,
-                full_name="Начальник академии",
+                full_name="Строевой отдел",
             )
         )
 
@@ -113,7 +113,7 @@ async def seed_if_empty() -> None:
               default_duty_password(DutyPostType.DPA, LOCATION_ACADEMY))
         print("  Admin: admin /", DEMO_ADMIN_PASSWORD)
         print("  Chief: nachalnik /", DEMO_CHIEF_PASSWORD)
-        print("  Locations: 1001 Академия, 1002 Пушкин, 1003 Лехтуси")
+        print("  Locations: 1001 Академия, 1002 ВГ №6 (Пушкин), 1003 ВГ №61 (Лехтуси)")
         print("  Faculties: id 1–9 (без курсов — добавляйте в админке)")
         print("  Course IDs: F*10+C (14 = 1 фак 4 курс)")
 
@@ -121,7 +121,10 @@ async def seed_if_empty() -> None:
 async def ensure_chief_user() -> None:
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(User.username == "nachalnik"))
-        if result.scalar_one_or_none():
+        existing = result.scalar_one_or_none()
+        if existing:
+            if existing.full_name == "Начальник академии":
+                existing.full_name = "Строевой отдел"
             await session.commit()
             return
         session.add(
@@ -129,7 +132,7 @@ async def ensure_chief_user() -> None:
                 username="nachalnik",
                 password_hash=hash_password(DEMO_CHIEF_PASSWORD),
                 role=UserRole.CHIEF,
-                full_name="Начальник академии",
+                full_name="Строевой отдел",
             )
         )
         await session.commit()
