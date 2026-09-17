@@ -7,7 +7,7 @@ from app.core.enums import AuthKind, DutyPostType
 from app.models import DutyContact, DutyPost, Unit
 from app.schemas import AuthUser, DutyContactRead, DutySelfRegister
 from app.services.org import get_courses_for_faculty
-from app.services.people import format_rank
+from app.services.people import format_rank, validate_rank
 
 
 async def ensure_duty_contact_schema(session: AsyncSession) -> None:
@@ -27,7 +27,25 @@ async def ensure_duty_contact_schema(session: AsyncSession) -> None:
             "WHERE duty_post_id IS NOT NULL"
         )
     )
+    await _migrate_legacy_contacts(session)
     await session.flush()
+
+
+async def _migrate_legacy_contacts(session: AsyncSession) -> None:
+    """Bind orphan cards (duty_post_id IS NULL) to the only post on their unit."""
+    orphan_result = await session.execute(
+        select(DutyContact).where(DutyContact.duty_post_id.is_(None))
+    )
+    for contact in orphan_result.scalars().all():
+        posts_result = await session.execute(
+            select(DutyPost).where(
+                DutyPost.unit_id == contact.unit_id,
+                DutyPost.is_active.is_(True),
+            )
+        )
+        posts = list(posts_result.scalars().all())
+        if len(posts) == 1:
+            contact.duty_post_id = posts[0].id
 
 
 def _contact_label(post: DutyPost | None, rank: str, full_name: str) -> str:
@@ -47,6 +65,26 @@ async def get_self_contact_today(
             DutyContact.duty_post_id == user.duty_post_id,
         )
     )
+    contact = result.scalar_one_or_none()
+    if contact:
+        return contact
+    return await _find_claimable_legacy_contact(session, user, contact_date)
+
+
+async def _find_claimable_legacy_contact(
+    session: AsyncSession,
+    user: AuthUser,
+    contact_date: date,
+) -> DutyContact | None:
+    if user.unit_id is None:
+        return None
+    result = await session.execute(
+        select(DutyContact).where(
+            DutyContact.contact_date == contact_date,
+            DutyContact.unit_id == user.unit_id,
+            DutyContact.duty_post_id.is_(None),
+        )
+    )
     return result.scalar_one_or_none()
 
 
@@ -61,10 +99,10 @@ async def register_self_contact(
     if user.unit_id is None:
         raise ValueError("Нет привязки к подразделению")
 
-    rank = format_rank(body.rank.strip())
+    rank = validate_rank(body.rank.strip())
     full_name = body.full_name.strip()
     phone = body.phone.strip()
-    if not rank or not full_name or not phone:
+    if not full_name or not phone:
         raise ValueError("Заполните звание, ФИО и телефон")
 
     post = await session.get(DutyPost, user.duty_post_id)
@@ -77,6 +115,7 @@ async def register_self_contact(
         existing.phone = phone
         existing.post_name = label
         existing.unit_id = user.unit_id
+        existing.duty_post_id = user.duty_post_id
         contact = existing
     else:
         contact = DutyContact(
@@ -199,6 +238,7 @@ async def get_duty_contact_on_date(
         .where(
             DutyContact.contact_date == contact_date,
             DutyContact.unit_id == unit_id,
+            DutyContact.duty_post_id.isnot(None),
             DutyPost.post_type == post_type.value,
         )
         .limit(1)

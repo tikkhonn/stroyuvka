@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthSession } from "../api/client";
@@ -5,6 +6,7 @@ import { ChatUnreadProvider, useChatUnread } from "../context/ChatUnreadContext"
 import { openDutyStroevkaPrint } from "../utils/stroevayaPrint";
 import { Logo } from "./brand/Logo";
 import { DutyOnboardingProvider } from "./DutyOnboardingGate";
+import { DpfPrintModal } from "./DpfPrintModal";
 
 const NAV_DPA = [
   { to: "/chessboard", label: "Шахматка" },
@@ -158,7 +160,7 @@ function dutyPrintHandler(session: AuthSession) {
   };
 }
 
-function Header() {
+function Header({ onDpfPrint }: { onDpfPrint: () => void }) {
   const { session } = useAuth();
   const location = useLocation();
   const { navHasUnread } = useChatUnread();
@@ -169,10 +171,10 @@ function Header() {
 
   const renderNavItem = (item: { to: string; label: string }) => {
     const isChat = item.to === "/chat";
-    const isDutyPrint =
-      item.to === "/print" &&
-      session != null &&
-      (session.role === "dpk" || session.role === "dpf");
+    const isDpkPrint =
+      item.to === "/print" && session != null && session.role === "dpk";
+    const isDpfPrint =
+      item.to === "/print" && session != null && session.role === "dpf";
     const active =
       location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
     const showUnread = isChat && navHasUnread && !onChat;
@@ -182,7 +184,13 @@ function Header() {
         item={item}
         active={active}
         showUnread={showUnread}
-        onPrintClick={isDutyPrint ? dutyPrintHandler(session!) : undefined}
+        onPrintClick={
+          isDpkPrint
+            ? dutyPrintHandler(session!)
+            : isDpfPrint
+              ? onDpfPrint
+              : undefined
+        }
       />
     );
   };
@@ -235,12 +243,22 @@ function Footer() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  const [dpfPrintOpen, setDpfPrintOpen] = useState(false);
+
   return (
     <div className="min-h-screen flex flex-col">
       <DutyOnboardingProvider>
         <ChatUnreadProvider>
-          <Header />
+          <Header onDpfPrint={() => setDpfPrintOpen(true)} />
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">{children}</main>
+          {session?.role === "dpf" ? (
+            <DpfPrintModal
+              open={dpfPrintOpen}
+              onClose={() => setDpfPrintOpen(false)}
+              facultyId={session.unit_id}
+            />
+          ) : null}
         </ChatUnreadProvider>
       </DutyOnboardingProvider>
       <Footer />

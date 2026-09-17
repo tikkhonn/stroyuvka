@@ -15,17 +15,18 @@ from app.schemas import (
     RosterParseRow,
 )
 from app.services.people import (
+    FIO_REQUIRED_MSG,
     create_person,
     display_last_name,
     find_match,
     format_display_name,
-    format_initials,
     format_rank,
+    fio_key,
     list_people,
-    match_key,
     normalize_department_code,
     parse_fio,
     sync_unit_strength_from_people,
+    validate_rank,
 )
 
 RANK_HEADERS = {"звание", "зв", "зв.", "rank"}
@@ -79,13 +80,14 @@ class ParsedLine:
     rank: str
     last_name: str
     first_name: str
+    middle_name: str
     source: str
     department_code: str | None = None
     warnings: list[str] = field(default_factory=list)
 
     @property
     def full_name(self) -> str:
-        return format_display_name(self.last_name, self.first_name)
+        return format_display_name(self.last_name, self.first_name, self.middle_name)
 
 
 def _norm_header(value: object) -> str:
@@ -237,32 +239,30 @@ def _parse_department_cell(mapping: dict[str, int], row: list[str]) -> str | Non
 
 def _parse_name_cells(
     mapping: dict[str, int], row: list[str]
-) -> tuple[str, str, list[str]]:
+) -> tuple[str, str, str, list[str]]:
     warnings: list[str] = []
     if "fio" in mapping:
         raw = (row[mapping["fio"]] if mapping["fio"] < len(row) else "").strip()
         if not raw:
-            return "", "", warnings
+            return "", "", "", warnings
         try:
-            last_name, first_name = parse_fio(raw)
-            return last_name, first_name, warnings
+            last_name, first_name, middle_name = parse_fio(raw)
+            return last_name, first_name, middle_name, warnings
         except ValueError as exc:
             warnings.append(str(exc))
-            return "", "", warnings
+            return "", "", "", warnings
 
     last = (row[mapping["last"]] if mapping["last"] < len(row) else "").strip()
     init = (row[mapping["init"]] if mapping["init"] < len(row) else "").strip()
     if not last:
-        return "", "", warnings
+        return "", "", "", warnings
     combined = f"{last} {init}".strip() if init else last
     try:
-        last_name, first_name = parse_fio(combined)
-        return last_name, first_name, warnings
-    except ValueError:
-        if init:
-            return last, format_initials(init), warnings
-        warnings.append("Укажите фамилию и инициалы в формате «Иванов И.И.»")
-        return "", "", warnings
+        last_name, first_name, middle_name = parse_fio(combined)
+        return last_name, first_name, middle_name, warnings
+    except ValueError as exc:
+        warnings.append(str(exc))
+        return "", "", "", warnings
 
 
 def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
@@ -281,13 +281,20 @@ def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
             continue
         if _is_header_row(row):
             continue
-        rank = format_rank((row[mapping["rank"]] if mapping["rank"] < len(row) else "").strip())
+        raw_rank = (row[mapping["rank"]] if mapping["rank"] < len(row) else "").strip()
+        rank = ""
+        rank_warnings: list[str] = []
+        if raw_rank:
+            try:
+                rank = validate_rank(raw_rank)
+            except ValueError as exc:
+                rank_warnings.append(str(exc))
         department_code = _parse_department_cell(mapping, row)
-        last_name, first_name, name_warnings = _parse_name_cells(mapping, row)
+        last_name, first_name, middle_name, name_warnings = _parse_name_cells(mapping, row)
         if not last_name and not rank and not first_name:
             continue
-        warnings = list(name_warnings)
-        if not rank:
+        warnings = list(name_warnings) + rank_warnings
+        if not raw_rank:
             warnings.append("Нет звания")
         if name_warnings and not last_name:
             parsed.append(
@@ -296,6 +303,7 @@ def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
                     rank=rank,
                     last_name="",
                     first_name="",
+                    middle_name="",
                     source=source,
                     department_code=department_code,
                     warnings=warnings,
@@ -308,6 +316,7 @@ def _parse_table_rows(rows: list[list[str]], source: str) -> list[ParsedLine]:
                 rank=rank,
                 last_name=last_name,
                 first_name=first_name,
+                middle_name=middle_name,
                 source=source,
                 department_code=department_code,
                 warnings=warnings,
@@ -343,36 +352,57 @@ def _parse_loose_line(text: str, row_number: int) -> ParsedLine | None:
 
     if rank and rest:
         try:
-            last_name, first_name = parse_fio(rest)
+            validated_rank = validate_rank(rank)
+            last_name, first_name, middle_name = parse_fio(rest)
             return ParsedLine(
                 row_number=row_number,
-                rank=format_rank(rank),
+                rank=validated_rank,
                 last_name=last_name,
                 first_name=first_name,
+                middle_name=middle_name,
                 source="text",
             )
-        except ValueError:
-            pass
+        except ValueError as exc:
+            return ParsedLine(
+                row_number=row_number,
+                rank="",
+                last_name="",
+                first_name="",
+                middle_name="",
+                source="text",
+                warnings=[str(exc)],
+            )
 
     parts = line.split(None, 1)
     if len(parts) == 2:
         try:
-            last_name, first_name = parse_fio(parts[1])
+            validated_rank = validate_rank(parts[0].strip())
+            last_name, first_name, middle_name = parse_fio(parts[1])
             return ParsedLine(
                 row_number=row_number,
-                rank=format_rank(parts[0].strip()),
+                rank=validated_rank,
                 last_name=last_name,
                 first_name=first_name,
+                middle_name=middle_name,
                 source="text",
             )
-        except ValueError:
-            pass
+        except ValueError as exc:
+            return ParsedLine(
+                row_number=row_number,
+                rank="",
+                last_name="",
+                first_name="",
+                middle_name="",
+                source="text",
+                warnings=[str(exc)],
+            )
 
     return ParsedLine(
         row_number=row_number,
         rank="",
         last_name="",
         first_name="",
+        middle_name="",
         source="text",
         warnings=[f"Не удалось разобрать строку: {line}"],
     )
@@ -405,16 +435,16 @@ def parse_roster_file(filename: str, content: bytes) -> tuple[list[ParsedLine], 
 
     usable: list[ParsedLine] = []
     for item in parsed:
-        if item.warnings and not item.last_name:
+        if item.warnings:
             errors.append(
                 RosterParseError(row_number=item.row_number, message=item.warnings[0])
             )
             continue
-        if not item.last_name or not item.first_name:
+        if not item.last_name or not item.first_name or not item.middle_name:
             errors.append(
                 RosterParseError(
                     row_number=item.row_number,
-                    message="Нужны фамилия и инициалы",
+                    message=FIO_REQUIRED_MSG,
                 )
             )
             continue
@@ -425,9 +455,9 @@ def parse_roster_file(filename: str, content: bytes) -> tuple[list[ParsedLine], 
             continue
         usable.append(item)
 
-    seen: dict[tuple[str, str], int] = {}
+    seen: dict[tuple[str, str, str], int] = {}
     for item in usable:
-        key = match_key(item.last_name, item.first_name)
+        key = fio_key(item.last_name, item.first_name, item.middle_name)
         if key in seen:
             errors.append(
                 RosterParseError(
@@ -459,7 +489,9 @@ async def preview_import(
     matched_ids: set[int] = set()
 
     for item in parsed:
-        active, inactive = find_match(existing, item.last_name, item.first_name)
+        active, inactive = find_match(
+            existing, item.last_name, item.first_name, item.middle_name
+        )
         action = "add"
         person_id = None
         warnings = list(item.warnings)
@@ -490,6 +522,7 @@ async def preview_import(
                 full_name=item.full_name,
                 last_name=item.last_name,
                 first_name=item.first_name,
+                middle_name=item.middle_name,
                 department_code=item.department_code,
                 source=item.source,
                 action=action,
@@ -510,6 +543,7 @@ async def preview_import(
                         full_name=display_last_name(person),
                         last_name=person.last_name,
                         first_name=person.first_name,
+                        middle_name=person.middle_name,
                         department_code=person.department_code,
                         source="db",
                         action="deactivate",
@@ -548,13 +582,16 @@ async def apply_import(
     for row in preview.rows:
         if row.action == "deactivate":
             continue
-        active, inactive = find_match(existing, row.last_name, row.first_name)
+        active, inactive = find_match(
+            existing, row.last_name, row.first_name, row.middle_name
+        )
         if row.action == "add":
             person = await create_person(
                 session,
                 unit,
                 row.rank,
                 row.full_name,
+                middle_name=row.middle_name,
                 department_code=row.department_code,
             )
             existing.append(person)
@@ -565,6 +602,7 @@ async def apply_import(
             person.rank = row.rank
             person.last_name = row.last_name
             person.first_name = row.first_name
+            person.middle_name = row.middle_name or None
             person.department_code = normalize_department_code(row.department_code)
             person.is_active = True
             matched_ids.add(person.id)
@@ -574,6 +612,7 @@ async def apply_import(
             person.rank = row.rank
             person.last_name = row.last_name
             person.first_name = row.first_name
+            person.middle_name = row.middle_name or None
             person.department_code = normalize_department_code(row.department_code)
             person.is_active = True
             matched_ids.add(person.id)
@@ -600,7 +639,7 @@ def export_xlsx(people: list[Person]) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Список"
-    ws.append(["Воинское звание", "Кафедра", "Фамилия И.О."])
+    ws.append(["Воинское звание", "Кафедра", "Фамилия, имя, отчество"])
     for person in people:
         ws.append([format_rank(person.rank), person.department_code or "", display_last_name(person)])
     buf = io.BytesIO()
@@ -617,7 +656,7 @@ def export_docx(people: list[Person], title: str) -> bytes:
     hdr = table.rows[0].cells
     hdr[0].text = "Воинское звание"
     hdr[1].text = "Кафедра"
-    hdr[2].text = "Фамилия И.О."
+    hdr[2].text = "Фамилия, имя, отчество"
     for person in people:
         cells = table.add_row().cells
         cells[0].text = format_rank(person.rank)

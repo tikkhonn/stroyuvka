@@ -413,14 +413,14 @@ export function AdminUnitsPage() {
         </div>
         <button
           type="submit"
-          className="bg-vka-gold text-vka-navy px-4 py-2 rounded text-sm font-medium"
+          className="vka-admin-form-btn vka-admin-form-btn--gold"
         >
           Добавить курс в расположение
         </button>
         <button
           type="button"
           onClick={addCoursesBulk}
-          className="bg-vka-navy text-white px-4 py-2 rounded text-sm font-medium"
+          className="vka-admin-form-btn vka-admin-form-btn--navy"
         >
           Добавить все курсы (1–5)
         </button>
@@ -441,7 +441,7 @@ export function AdminUnitsPage() {
             className="border rounded px-2 py-1 w-24"
           />
         </div>
-        <button type="submit" className="bg-vka-navy text-white px-4 py-2 rounded text-sm">
+        <button type="submit" className="vka-admin-form-btn vka-admin-form-btn--navy">
           Создать факультет
         </button>
       </form>

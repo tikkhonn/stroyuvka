@@ -1,11 +1,48 @@
 import re
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import Composition, UnitType
 from app.models import Person, Unit, UnitStrength
 from app.schemas import PersonRead
+
+FIO_REQUIRED_MSG = "Укажите фамилию, имя и отчество полностью, без инициалов"
+RANK_ABBR_MSG = "Звание указывайте полностью, без сокращений"
+
+RANK_ABBREVIATIONS: frozenset[str] = frozenset(
+    {
+        "к-т",
+        "к-н",
+        "ст.л-т",
+        "ст. лейтенант",
+        "мл.л-т",
+        "мл. лейтенант",
+        "п/п-к",
+        "с-т",
+        "пр-к",
+        "ефр.",
+        "ряд.",
+        "полк.",
+        "кап.",
+    }
+)
+
+RANK_MIGRATION_MAP: dict[str, str] = {
+    "к-т": "курсант",
+    "к-н": "капитан",
+    "ст.л-т": "старший лейтенант",
+    "ст. лейтенант": "старший лейтенант",
+    "мл.л-т": "младший лейтенант",
+    "мл. лейтенант": "младший лейтенант",
+    "п/п-к": "подполковник",
+    "с-т": "сержант",
+    "пр-к": "прапорщик",
+    "ефр.": "ефрейтор",
+    "ряд.": "рядовой",
+    "полк.": "полковник",
+    "кап.": "капитан",
+}
 
 
 def normalize_last_name(value: str) -> str:
@@ -60,34 +97,56 @@ _FIO_RE = re.compile(
     re.UNICODE,
 )
 
+_FIO_FULL_RE = re.compile(
+    r"^(?P<last>[А-ЯЁа-яё-]+(?:-[А-ЯЁа-яё-]+)?)\s+(?P<first>[А-ЯЁа-яё-]+)\s+(?P<middle>[А-ЯЁа-яё-]+)$",
+    re.UNICODE,
+)
 
-def parse_fio(value: str) -> tuple[str, str]:
+
+def format_name_part(value: str) -> str:
+    return format_last_name(value)
+
+
+def parse_fio(value: str) -> tuple[str, str, str]:
     text = " ".join(value.split()).strip()
     if not text:
-        raise ValueError("Укажите фамилию и инициалы в формате «Иванов И.И.»")
-    match = _FIO_RE.match(text)
+        raise ValueError(FIO_REQUIRED_MSG)
+    match = _FIO_FULL_RE.match(text)
     if not match:
-        raise ValueError("Укажите фамилию и инициалы в формате «Иванов И.И.»")
-    last_name = format_last_name(match.group("last").strip())
-    rest = match.group("init").strip()
-    if _looks_like_initials(rest):
-        initials = format_initials(rest)
-    else:
-        initials = initials_from_words(rest.split())
-    if len([c for c in initials if c.isalpha()]) < 2:
-        raise ValueError("Укажите инициалы в формате «И.И.»")
-    return last_name, initials
+        loose = _FIO_RE.match(text)
+        if loose and _looks_like_initials(loose.group("init").strip()):
+            raise ValueError(FIO_REQUIRED_MSG)
+        raise ValueError(FIO_REQUIRED_MSG)
+    return (
+        format_last_name(match.group("last").strip()),
+        format_name_part(match.group("first").strip()),
+        format_name_part(match.group("middle").strip()),
+    )
 
 
-def format_display_name(last_name: str, initials: str) -> str:
-    last = last_name.strip()
-    init = initials.strip()
-    return f"{last} {init}" if init else last
+def format_display_name(
+    last_name: str, first_name: str, middle_name: str | None = None
+) -> str:
+    parts = [last_name.strip(), first_name.strip()]
+    if middle_name and middle_name.strip():
+        parts.append(middle_name.strip())
+    return " ".join(part for part in parts if part)
 
 
 def format_rank(value: str | None) -> str:
     text = " ".join((value or "").split()).strip()
     return text.casefold() if text else ""
+
+
+def validate_rank(value: str | None) -> str:
+    rank = format_rank(value)
+    if not rank:
+        raise ValueError("Укажите звание")
+    if "." in rank:
+        raise ValueError(RANK_ABBR_MSG)
+    if rank in RANK_ABBREVIATIONS:
+        raise ValueError(RANK_ABBR_MSG)
+    return rank
 
 
 def normalize_department_code(value: str | None) -> str | None:
@@ -106,12 +165,35 @@ def department_display_name(code: str | None) -> str:
     return f"Кафедра {code}"
 
 
+def normalize_given_name(value: str) -> str:
+    return " ".join(value.split()).casefold()
+
+
 def match_key(last_name: str, initials: str) -> tuple[str, str]:
     return normalize_last_name(last_name), normalize_initials(initials)
 
 
+def fio_key(last_name: str, first_name: str, middle_name: str | None) -> tuple[str, str, str]:
+    return (
+        normalize_last_name(last_name),
+        normalize_given_name(first_name),
+        normalize_given_name(middle_name or ""),
+    )
+
+
+def is_legacy_initials_record(person: Person) -> bool:
+    if person.middle_name:
+        return False
+    return _looks_like_initials(person.first_name)
+
+
+def initials_key_from_parts(last_name: str, first_name: str, middle_name: str) -> tuple[str, str]:
+    initials = format_initials(f"{first_name[:1]}{middle_name[:1]}")
+    return match_key(last_name, initials)
+
+
 def display_last_name(person: Person) -> str:
-    return format_display_name(person.last_name, person.first_name)
+    return format_display_name(person.last_name, person.first_name, person.middle_name)
 
 
 def person_to_read(person: Person) -> PersonRead:
@@ -167,17 +249,20 @@ async def assert_unique_in_unit(
     session: AsyncSession,
     unit_id: int,
     last_name: str,
-    initials: str,
+    first_name: str,
+    middle_name: str,
     exclude_id: int | None = None,
 ) -> None:
-    key = match_key(last_name, initials)
+    key = fio_key(last_name, first_name, middle_name)
     people = await list_people(session, unit_id, include_inactive=False)
     for person in people:
         if exclude_id is not None and person.id == exclude_id:
             continue
-        if match_key(person.last_name, person.first_name) == key:
+        if is_legacy_initials_record(person):
+            continue
+        if fio_key(person.last_name, person.first_name, person.middle_name) == key:
             raise ValueError(
-                f"В подразделении уже есть {person.last_name} {person.first_name}"
+                f"В подразделении уже есть {format_display_name(last_name, first_name, middle_name)}"
             )
 
 
@@ -189,17 +274,50 @@ async def create_person(
     middle_name: str | None = None,
     department_code: str | None = None,
 ) -> Person:
-    rank = format_rank(rank)
-    if not rank:
-        raise ValueError("Укажите звание")
-    last_name, first_name = parse_fio(full_name)
-    await assert_unique_in_unit(session, unit.id, last_name, first_name)
+    rank = validate_rank(rank)
+    last_name, first_name, parsed_middle = parse_fio(full_name)
+    resolved_middle = parsed_middle if middle_name is None else (middle_name.strip() or None)
+    if middle_name is not None and middle_name.strip():
+        resolved_middle = format_name_part(middle_name.strip())
+
+    existing = await list_people(session, unit.id, include_inactive=True)
+    active, inactive = find_match(existing, last_name, first_name, resolved_middle)
+    if len(active) > 1 or (not active and len(inactive) > 1):
+        raise ValueError(
+            f"Конфликт: несколько записей {format_display_name(last_name, first_name, resolved_middle)}"
+        )
+    if len(active) == 1:
+        if is_legacy_initials_record(active[0]):
+            return await update_person(
+                session,
+                active[0],
+                rank=rank,
+                full_name=full_name,
+                department_code=department_code,
+                is_active=True,
+            )
+        raise ValueError(
+            f"В подразделении уже есть {format_display_name(last_name, first_name, resolved_middle)}"
+        )
+    if len(inactive) == 1:
+        return await update_person(
+            session,
+            inactive[0],
+            rank=rank,
+            full_name=full_name,
+            department_code=department_code,
+            is_active=True,
+        )
+
+    await assert_unique_in_unit(
+        session, unit.id, last_name, first_name, resolved_middle or ""
+    )
     person = Person(
         unit_id=unit.id,
         rank=rank,
         last_name=last_name,
         first_name=first_name,
-        middle_name=(middle_name or "").strip() or None,
+        middle_name=resolved_middle,
         department_code=normalize_department_code(department_code),
         composition=composition_for_unit(unit),
         is_active=True,
@@ -223,21 +341,28 @@ async def update_person(
 ) -> Person:
     next_last = person.last_name
     next_first = person.first_name
+    next_middle = person.middle_name or ""
     if full_name is not None:
-        next_last, next_first = parse_fio(full_name)
+        next_last, next_first, next_middle = parse_fio(full_name)
+    elif middle_name is not None:
+        next_middle = middle_name.strip() or ""
     next_active = person.is_active if is_active is None else is_active
     if next_active:
         await assert_unique_in_unit(
-            session, person.unit_id, next_last, next_first, exclude_id=person.id
+            session,
+            person.unit_id,
+            next_last,
+            next_first,
+            next_middle,
+            exclude_id=person.id,
         )
     if rank is not None:
-        person.rank = format_rank(rank)
-        if not person.rank:
-            raise ValueError("Укажите звание")
+        person.rank = validate_rank(rank)
     if full_name is not None:
         person.last_name = next_last
         person.first_name = next_first
-    if middle_name is not None:
+        person.middle_name = next_middle or None
+    elif middle_name is not None:
         person.middle_name = middle_name.strip() or None
     if department_code_set:
         person.department_code = normalize_department_code(department_code)
@@ -256,15 +381,41 @@ async def deactivate_person(session: AsyncSession, person: Person) -> Person:
 
 
 def find_match(
-    people: list[Person], last_name: str, initials: str
+    people: list[Person], last_name: str, first_name: str, middle_name: str | None
 ) -> tuple[list[Person], list[Person]]:
-    key = match_key(last_name, initials)
-    active = [
-        p for p in people if p.is_active and match_key(p.last_name, p.first_name) == key
-    ]
-    inactive = [
+    target = fio_key(last_name, first_name, middle_name)
+
+    def matches_full(person: Person) -> bool:
+        if is_legacy_initials_record(person):
+            return False
+        return fio_key(person.last_name, person.first_name, person.middle_name) == target
+
+    active = [p for p in people if p.is_active and matches_full(p)]
+    inactive = [p for p in people if not p.is_active and matches_full(p)]
+    if active or inactive:
+        return active, inactive
+
+    legacy_key = initials_key_from_parts(last_name, first_name, middle_name or "")
+    active_legacy = [
         p
         for p in people
-        if not p.is_active and match_key(p.last_name, p.first_name) == key
+        if p.is_active and is_legacy_initials_record(p) and match_key(p.last_name, p.first_name) == legacy_key
     ]
-    return active, inactive
+    inactive_legacy = [
+        p
+        for p in people
+        if not p.is_active and is_legacy_initials_record(p) and match_key(p.last_name, p.first_name) == legacy_key
+    ]
+    return active_legacy, inactive_legacy
+
+
+async def migrate_rank_abbreviations(session: AsyncSession) -> None:
+    for old, new in RANK_MIGRATION_MAP.items():
+        new_rank = format_rank(new)
+        old_key = format_rank(old)
+        for table in ("people", "absence_entries", "duty_contacts"):
+            await session.execute(
+                text(f"UPDATE {table} SET rank = :new_rank WHERE rank = :old_rank"),
+                {"new_rank": new_rank, "old_rank": old_key},
+            )
+    await session.flush()

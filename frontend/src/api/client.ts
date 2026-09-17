@@ -263,6 +263,7 @@ export interface RosterParseRow {
   full_name: string;
   last_name: string;
   first_name: string;
+  middle_name: string;
   department_code: string | null;
   source: string;
   action: string | null;

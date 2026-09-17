@@ -139,6 +139,26 @@
   @apply bg-gray-50/80;
 }
 
+.vka-roster-checkbox {
+  @apply h-4 w-4 shrink-0;
+}
+
+.vka-roster-checkbox-btn {
+  @apply inline-flex h-4 min-h-4 max-h-4 items-center justify-center px-1.5 text-[11px] leading-none rounded border disabled:opacity-50 whitespace-nowrap;
+}
+
+.vka-admin-form-btn {
+  @apply inline-flex items-center justify-center px-3 py-1 text-sm rounded border border-transparent disabled:opacity-50 shrink-0;
+}
+
+.vka-admin-form-btn--gold {
+  @apply bg-vka-gold text-vka-navy font-medium;
+}
+
+.vka-admin-form-btn--navy {
+  @apply bg-vka-navy text-white hover:bg-vka-navy-light;
+}
+
 @media print {
   .no-print {
     display: none !important;

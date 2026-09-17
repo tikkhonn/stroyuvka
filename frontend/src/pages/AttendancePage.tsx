@@ -14,7 +14,7 @@ import { SummaryCards } from "../components/SummaryCards";
 import { StatusBadge } from "../components/StatusBadge";
 import { SubmittedReportStatus } from "../components/SubmittedReportStatus";
 import { DutyLandlinePlaque } from "../components/DutyLandlinePlaque";
-import { RosterSection } from "../components/RosterSection";
+import { RosterSection, type RosterSortState } from "../components/RosterSection";
 import { RosterPersonCombobox } from "../components/RosterPersonCombobox";
 import { HospitalSelect } from "../components/HospitalSelect";
 import { onWsEvent } from "../api/ws";
@@ -51,6 +51,10 @@ export function AttendancePage() {
   const [newDetail, setNewDetail] = useState("");
   const [newHospitalId, setNewHospitalId] = useState<number | null>(null);
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [rosterSortState, setRosterSortState] = useState<RosterSortState>({
+    key: "last_name",
+    dir: "asc",
+  });
 
   useEffect(() => {
     void (async () => {
@@ -323,6 +327,8 @@ export function AttendancePage() {
   const selectedMeta = units.find((u) => u.id === unitId);
   const canSubmitCourse = session?.role === "dpk";
   const isDpf = session?.role === "dpf";
+  const enableRosterSort = isDpf && selectedMeta?.kind === "officers";
+  const isAdmin = session?.shell === "admin";
   const showSubmittedStatus = (canSubmitCourse || isDpf) && snapshot;
   const showDutyPlaque = (canSubmitCourse || isDpf) && snapshot;
   const dutyPlaqueItems = canSubmitCourse
@@ -424,6 +430,10 @@ export function AttendancePage() {
             setSaving={setSaving}
             open={rosterOpen}
             onOpenChange={setRosterOpen}
+            enableSort={enableRosterSort}
+            sortState={rosterSortState}
+            onSortStateChange={setRosterSortState}
+            compactCheckboxActions={isAdmin}
           />
 
           <div className="bg-white rounded-lg shadow mb-4 border border-gray-200">

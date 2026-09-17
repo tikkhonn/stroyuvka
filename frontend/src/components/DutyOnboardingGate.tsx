@@ -27,7 +27,7 @@ export function useDutyOnboarding() {
 }
 
 export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
   const [registered, setRegistered] = useState(true);
@@ -63,6 +63,7 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
   }, [isDuty]);
 
   useEffect(() => {
+    setShiftMode(false);
     checkStatus();
   }, [checkStatus, session?.duty_post_id]);
 
@@ -76,6 +77,11 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
     setRegistered(false);
     setError("");
   }, [isDuty]);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -168,6 +174,14 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
                 className="w-full bg-vka-navy text-white py-2.5 rounded font-medium disabled:opacity-50"
               >
                 {submitting ? "Сохранение..." : "Продолжить работу"}
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={handleLogout}
+                className="w-full border border-gray-300 text-gray-700 py-2.5 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Выйти
               </button>
             </form>
           </div>

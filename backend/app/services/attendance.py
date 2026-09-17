@@ -37,6 +37,7 @@ from app.services.people import (
     department_display_name,
     display_last_name,
     format_rank,
+    validate_rank,
     list_people,
     person_to_read,
 )
@@ -412,11 +413,9 @@ async def add_absence_entry(
         return created, notify
 
     last_name = body.last_name.strip()
-    rank = format_rank(body.rank)
+    rank = validate_rank(body.rank)
     if not last_name:
         raise ValueError("Укажите фамилию")
-    if not rank:
-        raise ValueError("Укажите звание")
 
     if len(entries) + 1 > total:
         raise ValueError(

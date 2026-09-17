@@ -328,6 +328,7 @@ class RosterParseRow(BaseModel):
     full_name: str
     last_name: str = ""
     first_name: str = ""
+    middle_name: str = ""
     department_code: str | None = None
     source: str = ""
     action: str | None = None

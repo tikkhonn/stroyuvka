@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DutyContact, api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { DutyContactEditModal } from "../components/DutyContactEditModal";
 import { useDutyOnboarding } from "../components/DutyOnboardingGate";
 import { formatRank } from "../constants/ranks";
 
@@ -11,6 +12,7 @@ export function ShiftChangePage() {
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,7 +34,7 @@ export function ShiftChangePage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, session?.duty_post_id]);
 
   const handleShiftChange = async () => {
     setError("");
@@ -65,9 +67,16 @@ export function ShiftChangePage() {
         <>
           {registered && contact && (
             <div className="bg-white rounded-lg shadow p-4 mb-6 border-l-4 border-vka-gold">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
-                Сейчас на дежурстве
-              </p>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Сейчас на дежурстве</p>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="text-sm text-vka-navy underline hover:no-underline shrink-0"
+                >
+                  Редактировать
+                </button>
+              </div>
               <p className="font-medium text-vka-navy">{currentName}</p>
               <p className="text-sm mt-1">{contact.phone}</p>
             </div>
@@ -135,6 +144,17 @@ export function ShiftChangePage() {
             </div>
           )}
         </>
+      )}
+
+      {editing && contact && (
+        <DutyContactEditModal
+          contact={contact}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => {
+            setContact(updated);
+            setEditing(false);
+          }}
+        />
       )}
     </div>
   );

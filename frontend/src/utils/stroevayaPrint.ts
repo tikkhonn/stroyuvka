@@ -18,11 +18,15 @@ export function openPrintHtml(html: string, printWindow?: Window | null): Window
   return w;
 }
 
+export type DpfPrintComposition = "all" | "variable" | "permanent";
+
 export async function openDutyStroevkaPrint(options: {
   role: "dpk" | "dpf";
   unitId: number | null;
   reportDate?: string;
   printWindow?: Window | null;
+  composition?: DpfPrintComposition;
+  departmentCode?: string;
 }): Promise<void> {
   const reportDate = options.reportDate ?? todayLocal();
   if (!options.unitId) {
@@ -36,6 +40,14 @@ export async function openDutyStroevkaPrint(options: {
     scope: options.role === "dpk" ? "unit" : "faculty",
     unit_id: String(options.unitId),
   });
+
+  if (options.role === "dpf") {
+    if (options.departmentCode) {
+      params.set("department_code", options.departmentCode);
+    } else if (options.composition && options.composition !== "all") {
+      params.set("composition", options.composition);
+    }
+  }
 
   const res = await fetch(`${base}/api/print/stroevaya?${params}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},

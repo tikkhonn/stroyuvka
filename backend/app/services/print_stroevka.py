@@ -12,7 +12,7 @@ from app.schemas import AbsenceEntryRead, AttendanceAggregate
 from app.services.attendance import compute_aggregate_for_unit, get_attendance_snapshot, _normalize_code
 from app.services.duty_contacts import get_duty_contact_on_date
 from app.services.org import get_courses_for_faculty, get_courses_for_location
-from app.services.people import format_rank
+from app.services.people import department_display_name, format_rank, normalize_department_code
 from app.services.unit_ids import LOCATION_ACADEMY
 
 ACADEMY_TITLE = "Военно-космической академии имени А.Ф. Можайского"
@@ -113,6 +113,10 @@ def _subtitle_for_unit(unit: Unit, report_date: date) -> str:
 
 def _subtitle_academy(report_date: date) -> str:
     return f"{ACADEMY_TITLE} на {_format_date_ru(report_date)}"
+
+
+def _subtitle_for_department(dept_name: str, unit: Unit, report_date: date) -> str:
+    return f"{dept_name}, {unit.name} {ACADEMY_TITLE} на {_format_date_ru(report_date)}"
 
 
 _PRINT_PAGE_STYLE = """
@@ -530,6 +534,8 @@ async def build_stroevka_print(
     report_date: date,
     *,
     category_code: str | None = None,
+    composition: str = "all",
+    department_code: str | None = None,
 ) -> str:
     if category_code:
         try:
@@ -638,12 +644,6 @@ async def build_stroevka_print(
         )
 
     if scope == "faculty":
-        courses = await get_courses_for_faculty(session, unit_id)
-        summary_rows = await _summary_rows_for_units(
-            session, courses, report_date, include_officers=unit
-        )
-        unit_ids = [c.id for c in courses] + [unit_id]
-        absences = await _absences_for_units(session, unit_ids, report_date)
         dpf_footer = await _duty_sign_footer(
             session,
             report_date,
@@ -651,6 +651,43 @@ async def build_stroevka_print(
             DutyPostType.DPF,
             f"Дежурный по {unit_id} факультету",
         )
+
+        normalized_dept = normalize_department_code(department_code)
+        if normalized_dept:
+            snap = await get_attendance_snapshot(
+                session, unit_id, report_date, editable=False
+            )
+            dept = next(
+                (d for d in (snap.departments or []) if d.code == normalized_dept),
+                None,
+            )
+            if not dept:
+                raise ValueError(
+                    f"Кафедра {department_display_name(normalized_dept)} "
+                    "не найдена в списке офицеров"
+                )
+            summary_rows = [(dept.name, dept.aggregate)]
+            absences = [(snap.unit_name, entry) for entry in dept.absences]
+            subtitle = _subtitle_for_department(dept.name, unit, report_date)
+            return _build_html(subtitle, summary_rows, absences, duty_footer=dpf_footer)
+
+        if composition == "variable":
+            courses = await get_courses_for_faculty(session, unit_id)
+            summary_rows = await _summary_rows_for_units(session, courses, report_date)
+            unit_ids = [c.id for c in courses]
+        elif composition == "permanent":
+            officers_name = f"Офицеры ({unit.name})"
+            agg = await compute_aggregate_for_unit(session, unit_id, report_date)
+            summary_rows = [(officers_name, agg)]
+            unit_ids = [unit_id]
+        else:
+            courses = await get_courses_for_faculty(session, unit_id)
+            summary_rows = await _summary_rows_for_units(
+                session, courses, report_date, include_officers=unit
+            )
+            unit_ids = [c.id for c in courses] + [unit_id]
+
+        absences = await _absences_for_units(session, unit_ids, report_date)
         return _build_html(
             _subtitle_for_unit(unit, report_date),
             summary_rows,

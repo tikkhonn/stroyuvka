@@ -3,7 +3,9 @@ import { todayLocal } from "../utils/date";
 import { UnitRead, api, downloadFile } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ABSENCE_CATEGORY_OPTIONS } from "../constants/absenceCategories";
+import { useNavigate } from "react-router-dom";
 import { DutyAutoPrint } from "../components/DutyAutoPrint";
+import { DpfPrintModal } from "../components/DpfPrintModal";
 import { openPrintHtml } from "../utils/stroevayaPrint";
 
 type Scope = "academy" | "location" | "faculty";
@@ -11,10 +13,12 @@ type ReportKind = Scope | "by_category";
 
 export function PrintPage() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const isDpk = session?.role === "dpk";
   const isDpf = session?.role === "dpf";
   const isDpa = session?.role === "dpa";
   const reportDate = todayLocal();
+  const [dpfPrintOpen, setDpfPrintOpen] = useState(true);
   const [date, setDate] = useState(reportDate);
   const [reportKind, setReportKind] = useState<ReportKind>("academy");
   const [categoryCode, setCategoryCode] = useState("duty");
@@ -91,7 +95,22 @@ export function PrintPage() {
   }
 
   if (isDpf) {
-    return <DutyAutoPrint role="dpf" unitId={session?.unit_id ?? null} />;
+    return (
+      <div>
+        <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">Печать</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          {dpfPrintOpen
+            ? "Выберите вид строевой записки для печати."
+            : "Документ открыт в новом окне. Чтобы напечатать ещё раз, нажмите «Печать» в меню."}
+        </p>
+        <DpfPrintModal
+          open={dpfPrintOpen}
+          onClose={() => navigate("/stroevka", { replace: true })}
+          onPrinted={() => setDpfPrintOpen(false)}
+          facultyId={session?.unit_id ?? null}
+        />
+      </div>
+    );
   }
 
   return (

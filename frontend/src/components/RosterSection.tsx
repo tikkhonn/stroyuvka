@@ -16,10 +16,17 @@ import {
   absenceCategoryRowClass,
   isSickCategory,
 } from "../constants/absenceCategories";
-import { RANK_SUGGESTIONS, formatRank } from "../constants/ranks";
+import {
+  RANK_SUGGESTIONS,
+  comparePersonNamesAsc,
+  compareRanks,
+  formatRank,
+} from "../constants/ranks";
 
 type ImportMode = "upsert" | "replace";
 type SickDraft = { person_id: number; hospital_id: number | null; note: string };
+export type RosterSortKey = "rank" | "last_name";
+export type RosterSortState = { key: RosterSortKey; dir: "asc" | "desc" };
 
 type Props = {
   unitId: number;
@@ -35,6 +42,10 @@ type Props = {
   setSaving: (value: boolean) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  enableSort?: boolean;
+  sortState?: RosterSortState;
+  onSortStateChange?: (state: RosterSortState) => void;
+  compactCheckboxActions?: boolean;
 };
 
 export function RosterSection({
@@ -51,6 +62,10 @@ export function RosterSection({
   setSaving,
   open: openProp,
   onOpenChange,
+  enableSort = false,
+  sortState: sortStateProp,
+  onSortStateChange,
+  compactCheckboxActions = false,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [internalOpen, setInternalOpen] = useState(true);
@@ -72,6 +87,17 @@ export function RosterSection({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("upsert");
   const [sickDrafts, setSickDrafts] = useState<SickDraft[] | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [internalSortState, setInternalSortState] = useState<RosterSortState>({
+    key: "last_name",
+    dir: "asc",
+  });
+  const sortState = sortStateProp ?? internalSortState;
+  const setSortState = (value: RosterSortState | ((prev: RosterSortState) => RosterSortState)) => {
+    const next = typeof value === "function" ? value(sortState) : value;
+    if (onSortStateChange) onSortStateChange(next);
+    else setInternalSortState(next);
+  };
 
   useEffect(() => {
     if (!editable) {
@@ -119,16 +145,46 @@ export function RosterSection({
     );
   }, [activePeople, query]);
 
+  const displayPeople = useMemo(() => {
+    if (!enableSort) return filtered;
+    const rows = [...filtered];
+    rows.sort((a, b) => {
+      const primary =
+        sortState.key === "rank"
+          ? compareRanks(a.rank, b.rank, sortState.dir)
+          : sortState.dir === "asc"
+            ? comparePersonNamesAsc(a, b)
+            : -comparePersonNamesAsc(a, b);
+      if (primary !== 0) return primary;
+      return comparePersonNamesAsc(a, b);
+    });
+    return rows;
+  }, [filtered, enableSort, sortState]);
+
+  const handleSortClick = (key: RosterSortKey) => {
+    setSortState((prev) => {
+      if (prev.key !== key) return { key, dir: "asc" };
+      return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
+    });
+  };
+
+  const sortButtonClass = (active: boolean) =>
+    `rounded border px-2 py-1 text-sm transition ${
+      active
+        ? "border-vka-navy bg-vka-cream/60 text-vka-navy font-medium"
+        : "border-gray-200 text-gray-700 hover:border-vka-navy/40 hover:bg-gray-50"
+    }`;
+
   const canSelect = editable && localEditing;
   const allSelected =
-    canSelect && filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+    canSelect && displayPeople.length > 0 && displayPeople.every((p) => selected.has(p.id));
 
   const toggleAll = () => {
     if (allSelected) {
       setSelected(new Set());
       return;
     }
-    setSelected(new Set(filtered.map((p) => p.id)));
+    setSelected(new Set(displayPeople.map((p) => p.id)));
   };
 
   const toggleOne = (id: number) => {
@@ -166,7 +222,7 @@ export function RosterSection({
       setNewDepartment("");
       await onReload();
     } catch (err) {
-      onMessage(err instanceof Error ? err.message : "Ошибка");
+      setAddError(err instanceof Error ? err.message : "Ошибка");
     } finally {
       setSaving(false);
     }
@@ -325,6 +381,14 @@ export function RosterSection({
     categories.find((c) => c.code === bulkCategory)?.detail_required
   );
 
+  const checkboxClass = compactCheckboxActions ? "vka-roster-checkbox" : undefined;
+  const rowActionBtnClass = compactCheckboxActions
+    ? "vka-roster-checkbox-btn border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+    : "text-xs text-red-600 hover:underline";
+  const bulkActionBtnClass = compactCheckboxActions
+    ? "vka-roster-checkbox-btn bg-vka-navy text-white border-vka-navy hover:bg-vka-navy-light shrink-0"
+    : "bg-vka-navy text-white px-3 py-2 rounded text-sm disabled:opacity-50 shrink-0";
+
   const reasonForPerson = (personId: number) => {
     const absence = absenceByPersonId.get(personId);
     if (!absence) return "в строю";
@@ -398,11 +462,35 @@ export function RosterSection({
         <div className="p-4">
           <p className="text-sm text-gray-600 mb-3">
             «По списку» равно числу активных людей. Шаблон: «Воинское звание | Кафедра | Фамилия,
-            имя, отчество» или «Звание | Фамилия И.О.». Старые двух- и трёхколоночные файлы без
-            кафедры тоже поддерживаются.
+            имя, отчество» или «Воинское звание | Фамилия, имя, отчество». Звание и ФИО — полностью,
+            без сокращений и без инициалов.
           </p>
 
           <div className="flex flex-wrap gap-3 mb-3 items-center">
+            {enableSort ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleSortClick("rank")}
+                  className={sortButtonClass(sortState.key === "rank")}
+                >
+                  Звание{" "}
+                  {sortState.key === "rank" ? (sortState.dir === "asc" ? "↑" : "↓") : ""}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSortClick("last_name")}
+                  className={sortButtonClass(sortState.key === "last_name")}
+                >
+                  Фамилия{" "}
+                  {sortState.key === "last_name"
+                    ? sortState.dir === "asc"
+                      ? "А–Я"
+                      : "Я–А"
+                    : ""}
+                </button>
+              </>
+            ) : null}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -433,7 +521,7 @@ export function RosterSection({
                     <input
                       value={newFullName}
                       onChange={(e) => setNewFullName(e.target.value)}
-                      placeholder="Иванов И.И."
+                      placeholder="Иванов Иван Иванович"
                       className="border rounded px-2 py-1 text-sm"
                       required
                     />
@@ -496,7 +584,7 @@ export function RosterSection({
                   <button
                     type="submit"
                     disabled={saving || selected.size === 0}
-                    className="bg-vka-navy text-white px-3 py-2 rounded text-sm disabled:opacity-50 shrink-0"
+                    className={bulkActionBtnClass}
                   >
                     Отметить
                   </button>
@@ -509,9 +597,14 @@ export function RosterSection({
             <thead>
               <tr>
                 {editable && (
-                  <th className="w-10">
+                  <th className="w-10 align-middle">
                     {localEditing && (
-                      <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+                      <input
+                        type="checkbox"
+                        className={checkboxClass}
+                        checked={allSelected}
+                        onChange={toggleAll}
+                      />
                     )}
                   </th>
                 )}
@@ -524,14 +617,14 @@ export function RosterSection({
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {displayPeople.length === 0 ? (
                 <tr>
                   <td colSpan={editable ? 7 : 6} className="text-gray-500 text-sm">
                     Список пуст — загрузите файл или добавьте человека вручную
                   </td>
                 </tr>
               ) : (
-                filtered.map((person, i) => {
+                displayPeople.map((person, i) => {
                   const absence = absenceByPersonId.get(person.id);
                   const rowClass = absence
                     ? absenceCategoryRowClass(absence.category_code)
@@ -539,10 +632,11 @@ export function RosterSection({
                   return (
                   <tr key={person.id} className={rowClass}>
                     {editable && (
-                      <td className="w-10">
+                      <td className="w-10 align-middle">
                         {localEditing && (
                           <input
                             type="checkbox"
+                            className={checkboxClass}
                             checked={selected.has(person.id)}
                             disabled={absenceByPersonId.has(person.id)}
                             onChange={() => toggleOne(person.id)}
@@ -556,12 +650,12 @@ export function RosterSection({
                     <td>{person.display_name || person.full_name}</td>
                     <td>{reasonForPerson(person.id)}</td>
                     {editable && (
-                      <td className="w-16">
+                      <td className="w-16 align-middle">
                         {localEditing && (
                           <button
                             type="button"
                             onClick={() => void deactivate(person)}
-                            className="text-xs text-red-600 hover:underline"
+                            className={rowActionBtnClass}
                           >
                             Удалить
                           </button>
@@ -659,6 +753,24 @@ export function RosterSection({
                 className="px-3 py-2 text-sm rounded bg-vka-navy text-white disabled:opacity-50"
               >
                 Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addError && (
+        <div className="fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-xl">
+            <h4 className="font-serif text-lg font-bold text-vka-navy mb-2">Не удалось добавить</h4>
+            <p className="text-sm text-red-700 bg-red-50 rounded p-3 mb-4">{addError}</p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm rounded bg-vka-navy text-white"
+                onClick={() => setAddError(null)}
+              >
+                Понятно
               </button>
             </div>
           </div>

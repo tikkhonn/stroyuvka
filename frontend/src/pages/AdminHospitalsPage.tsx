@@ -134,7 +134,7 @@ export function AdminHospitalsPage() {
         <button
           type="submit"
           disabled={saving}
-          className="bg-vka-navy text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+          className="vka-admin-form-btn vka-admin-form-btn--navy"
         >
           Добавить
         </button>

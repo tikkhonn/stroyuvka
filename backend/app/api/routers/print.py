@@ -33,6 +33,15 @@ async def stroevaya(
     scope: str = Query("unit", pattern="^(unit|location|faculty|academy)$"),
     unit_id: int | None = None,
     category_code: str | None = Query(None, description="Фильтр по причине отсутствия"),
+    composition: str = Query(
+        "all",
+        pattern="^(all|variable|permanent)$",
+        description="Состав факультета: all — курсы и офицеры, variable — только курсы, permanent — только офицеры",
+    ),
+    department_code: str | None = Query(
+        None,
+        description="Код кафедры офицеров (только для scope=faculty)",
+    ),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -75,9 +84,20 @@ async def stroevaya(
         if scope == "unit" and unit.type != UnitType.COURSE:
             raise HTTPException(400, "Для scope=unit нужен id курса")
 
+    if department_code and scope != "faculty":
+        raise HTTPException(400, "department_code доступен только для scope=faculty")
+    if scope != "faculty" and composition != "all":
+        composition = "all"
+
     try:
         html = await build_stroevka_print(
-            session, scope, unit_id, report_date, category_code=category_code
+            session,
+            scope,
+            unit_id,
+            report_date,
+            category_code=category_code,
+            composition=composition,
+            department_code=department_code,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
