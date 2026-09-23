@@ -56,7 +56,7 @@ function DutyGroup({
               <tr className="bg-gray-50 text-left text-xs text-gray-600 uppercase tracking-wide">
                 <th className="py-2 px-3 font-medium">Пост</th>
                 <th className="py-2 px-3 font-medium">Подразделение</th>
-                <th className="py-2 px-3 font-medium">Звание</th>
+                <th className="py-2 px-3 font-medium">Воинское звание</th>
                 <th className="py-2 px-3 font-medium">ФИО</th>
                 <th className="py-2 px-3 font-medium">Телефон</th>
                 <th className="py-2 px-3 font-medium">Помощь</th>

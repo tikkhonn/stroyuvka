@@ -467,17 +467,37 @@ async def _add_absences_for_people(
     if not unique:
         raise ValueError("Выберите людей из списка")
     taken = {e.person_id for e in entries if e.person_id}
-    if len(entries) + len(unique) > total:
+    entry_by_person = {e.person_id: e for e in entries if e.person_id}
+    new_count = sum(1 for item in unique if item.person_id not in taken)
+    if len(entries) + new_count > total:
         raise ValueError(
-            f"Нельзя добавить: отсутствующих станет {len(entries) + len(unique)}, по списку {total}"
+            f"Нельзя добавить: отсутствующих станет {len(entries) + new_count}, по списку {total}"
         )
-    created: list[AbsenceEntry] = []
+    affected: list[AbsenceEntry] = []
     for item in unique:
-        if item.person_id in taken:
-            raise ValueError("Один из выбранных уже отмечен отсутствующим")
         person = await session.get(Person, item.person_id)
         if not person or person.unit_id != unit.id or not person.is_active:
             raise ValueError("Человек не найден в списке подразделения")
+        note = (item.note or "").strip() or None
+        existing = entry_by_person.get(item.person_id)
+        if existing:
+            old_code = _normalize_code(existing.category_code)
+            existing.category_code = code
+            existing.rank = format_rank(person.rank)
+            existing.last_name = display_last_name(person)
+            if _is_sick(code):
+                existing.hospital_id = await _resolve_hospital_id(session, item.hospital_id)
+                existing.note = note
+            else:
+                existing.hospital_id = None
+                existing.note = note
+            new_code = _normalize_code(code)
+            if new_code not in PERSISTENT_ABSENCE_CODES:
+                existing.status_date = report_date
+            elif old_code not in PERSISTENT_ABSENCE_CODES:
+                existing.status_date = report_date
+            affected.append(existing)
+            continue
         entry = AbsenceEntry(
             unit_id=unit.id,
             person_id=person.id,
@@ -485,14 +505,14 @@ async def _add_absences_for_people(
             category_code=code,
             rank=format_rank(person.rank),
             last_name=display_last_name(person),
-            note=(item.note or "").strip() or None,
+            note=note,
             hospital_id=item.hospital_id if _is_sick(code) else None,
         )
         session.add(entry)
-        created.append(entry)
+        affected.append(entry)
         taken.add(person.id)
     await session.flush()
-    return created
+    return affected
 
 
 async def delete_absence_entry(

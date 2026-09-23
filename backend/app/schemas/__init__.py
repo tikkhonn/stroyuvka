@@ -200,7 +200,7 @@ class AbsenceEntryCreate(BaseModel):
         if self.people or self.person_ids:
             return self
         if not self.rank.strip() or not self.last_name.strip():
-            raise ValueError("Укажите звание и фамилию или выберите людей из списка")
+            raise ValueError("Укажите воинское звание и фамилию или выберите людей из списка")
         return self
 
 

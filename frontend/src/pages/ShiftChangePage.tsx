@@ -93,7 +93,7 @@ export function ShiftChangePage() {
             <h3 className="font-semibold text-vka-navy mb-3">Что произойдёт</h3>
             <ul className="text-sm text-gray-700 space-y-2 list-disc pl-5">
               <li>
-                Откроется форма для ввода данных <strong>нового дежурного</strong> — звание, ФИО и
+                Откроется форма для ввода данных <strong>нового дежурного</strong> — воинское звание, ФИО и
                 телефон. Без этого работа в системе недоступна.
               </li>
               <li>

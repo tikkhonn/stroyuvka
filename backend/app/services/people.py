@@ -8,7 +8,7 @@ from app.models import Person, Unit, UnitStrength
 from app.schemas import PersonRead
 
 FIO_REQUIRED_MSG = "Укажите фамилию, имя и отчество полностью, без инициалов"
-RANK_ABBR_MSG = "Звание указывайте полностью, без сокращений"
+RANK_ABBR_MSG = "Воинское звание указывайте полностью, без сокращений"
 
 RANK_ABBREVIATIONS: frozenset[str] = frozenset(
     {
@@ -141,7 +141,7 @@ def format_rank(value: str | None) -> str:
 def validate_rank(value: str | None) -> str:
     rank = format_rank(value)
     if not rank:
-        raise ValueError("Укажите звание")
+        raise ValueError("Укажите воинское звание")
     if "." in rank:
         raise ValueError(RANK_ABBR_MSG)
     if rank in RANK_ABBREVIATIONS:

@@ -13,9 +13,10 @@ import { SummaryCards } from "../components/SummaryCards";
 import { ReportPipelineBar } from "../components/ReportPipelineBar";
 import { StatusBadge } from "../components/StatusBadge";
 import { SubmittedReportStatus } from "../components/SubmittedReportStatus";
+import { DpfFacultySubmitButton } from "../components/DpfFacultySubmitButton";
 import { DutyLandlinePlaque } from "../components/DutyLandlinePlaque";
 import { onWsEvent } from "../api/ws";
-import { formatAbsenceName } from "../constants/ranks";
+import { formatAbsenceName, formatRank } from "../constants/ranks";
 import { formatAbsenceCategory, formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
 import { formatDateRu, todayLocal } from "../utils/date";
 
@@ -148,7 +149,11 @@ function CourseCard({
       {open && (
         <div className="px-4 pb-4 border-t border-gray-100">
           <SummaryCards agg={course.aggregate} />
-          <AbsencesList rows={course.absences} />
+          {role === "dpf" ? (
+            <CourseAbsencesTable absences={course.absences} showRank />
+          ) : (
+            <AbsencesList rows={course.absences} />
+          )}
           {pending && (
             <button
               type="button"
@@ -164,7 +169,17 @@ function CourseCard({
   );
 }
 
-function DepartmentBlock({ dept }: { dept: DepartmentStroevkaSummary }) {
+function absenceDisplayName(absence: AbsenceEntry, showRank: boolean): string {
+  return showRank ? absence.last_name : formatAbsenceName(absence);
+}
+
+function DepartmentBlock({
+  dept,
+  showRank = false,
+}: {
+  dept: DepartmentStroevkaSummary;
+  showRank?: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -186,7 +201,7 @@ function DepartmentBlock({ dept }: { dept: DepartmentStroevkaSummary }) {
           <SummaryCards agg={dept.aggregate} />
           <div className="mt-3">
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Отсутствующие</p>
-            <AbsencesList rows={dept.absences} />
+            <DepartmentAbsencesTable dept={dept} showRank={showRank} />
           </div>
         </div>
       )}
@@ -233,7 +248,11 @@ function OfficersCard({
           {hasDepartments ? (
             <>
               {departments.map((dept) => (
-                <DepartmentBlock key={dept.code ?? "_none"} dept={dept} />
+                <DepartmentBlock
+                  key={dept.code ?? "_none"}
+                  dept={dept}
+                  showRank={role === "dpf"}
+                />
               ))}
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <p className="text-sm font-medium text-vka-navy mb-2">Итого</p>
@@ -242,7 +261,7 @@ function OfficersCard({
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
                     Отсутствующие
                   </p>
-                  <AbsencesList rows={officers.absences} />
+                  <OfficersAbsencesTable officers={officers} showRank={role === "dpf"} />
                 </div>
               </div>
             </>
@@ -251,7 +270,7 @@ function OfficersCard({
               <SummaryCards agg={officers.aggregate} />
               <div className="mt-3">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Отсутствующие</p>
-                <AbsencesList rows={officers.absences} />
+                <OfficersAbsencesTable officers={officers} showRank={role === "dpf"} />
               </div>
             </>
           )}
@@ -270,6 +289,80 @@ function OfficersCard({
   );
 }
 
+type StroevkaAbsenceTableRow = {
+  key: string;
+  groupLabel: string;
+  absence: AbsenceEntry;
+};
+
+function StroevkaAbsencesTable({
+  groupColumnLabel,
+  rows,
+  showRank = false,
+}: {
+  groupColumnLabel?: string;
+  rows: StroevkaAbsenceTableRow[];
+  showRank?: boolean;
+}) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-gray-500">Отсутствующих нет</p>;
+  }
+
+  const showGroupColumn = Boolean(groupColumnLabel);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="vka-table w-full min-w-[640px] text-sm">
+        <thead>
+          <tr>
+            {showGroupColumn && <th>{groupColumnLabel}</th>}
+            {showRank && <th>Воинское звание</th>}
+            <th>ФИО</th>
+            <th>Причина</th>
+            <th>С</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ key, groupLabel, absence }) => {
+            const colorClass = absenceCategoryTextClass(absence.category_code);
+            return (
+              <tr key={key} className={absenceCategoryRowClass(absence.category_code)}>
+                {showGroupColumn && <td className="whitespace-nowrap">{groupLabel}</td>}
+                {showRank && (
+                  <td className={`whitespace-nowrap ${colorClass}`}>
+                    {formatRank(absence.rank) || "—"}
+                  </td>
+                )}
+                <td className={`font-medium ${colorClass}`}>
+                  {absenceDisplayName(absence, showRank)}
+                </td>
+                <td className={colorClass}>{absenceReasonLabel(absence)}</td>
+                <td className="whitespace-nowrap">{formatDateRu(absence.status_date)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DepartmentAbsencesTable({
+  dept,
+  showRank = false,
+}: {
+  dept: DepartmentStroevkaSummary;
+  showRank?: boolean;
+}) {
+  const rows = dept.absences.map((absence) => ({
+    key: String(absence.id),
+    groupLabel: dept.name,
+    absence,
+  }));
+
+  return <StroevkaAbsencesTable rows={rows} showRank={showRank} />;
+}
+
 function VariableCompositionAbsencesTable({
   courses,
 }: {
@@ -280,41 +373,57 @@ function VariableCompositionAbsencesTable({
     .flatMap((course) =>
       course.absences.map((absence) => ({
         key: `${course.course_id}-${absence.id}`,
-        courseName: course.course_name,
+        groupLabel: course.course_name,
         absence,
       }))
     );
 
-  if (rows.length === 0) {
-    return <p className="text-sm text-gray-500">Отсутствующих нет</p>;
-  }
+  return (
+    <StroevkaAbsencesTable groupColumnLabel="Курс" rows={rows} showRank />
+  );
+}
+
+function CourseAbsencesTable({
+  absences,
+  showRank = false,
+}: {
+  absences: AbsenceEntry[];
+  showRank?: boolean;
+}) {
+  const rows = absences.map((absence) => ({
+    key: String(absence.id),
+    groupLabel: "",
+    absence,
+  }));
+
+  return <StroevkaAbsencesTable rows={rows} showRank={showRank} />;
+}
+
+function OfficersAbsencesTable({
+  officers,
+  showRank = false,
+}: {
+  officers: AttendanceSnapshot;
+  showRank?: boolean;
+}) {
+  const departments = officers.departments ?? [];
+  const rows: StroevkaAbsenceTableRow[] =
+    departments.length > 0
+      ? departments.flatMap((dept) =>
+          dept.absences.map((absence) => ({
+            key: `${dept.code ?? "_none"}-${absence.id}`,
+            groupLabel: dept.name,
+            absence,
+          }))
+        )
+      : officers.absences.map((absence) => ({
+          key: String(absence.id),
+          groupLabel: "—",
+          absence,
+        }));
 
   return (
-    <div className="overflow-x-auto">
-      <table className="vka-table w-full min-w-[640px] text-sm">
-        <thead>
-          <tr>
-            <th>Курс</th>
-            <th>ФИО</th>
-            <th>Причина</th>
-            <th>С</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ key, courseName, absence }) => {
-            const colorClass = absenceCategoryTextClass(absence.category_code);
-            return (
-              <tr key={key} className={absenceCategoryRowClass(absence.category_code)}>
-                <td className="whitespace-nowrap">{courseName}</td>
-                <td className={`font-medium ${colorClass}`}>{formatAbsenceName(absence)}</td>
-                <td className={colorClass}>{absenceReasonLabel(absence)}</td>
-                <td className="whitespace-nowrap">{formatDateRu(absence.status_date)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <StroevkaAbsencesTable groupColumnLabel="Кафедра" rows={rows} showRank={showRank} />
   );
 }
 
@@ -369,62 +478,11 @@ function FacultyBlock({
   const [open, setOpen] = useState(
     role === "dpf" || bundle.has_pending_for_dpf || bundle.has_pending_for_dpa
   );
-  const [message, setMessage] = useState("");
-  const [messageIsError, setMessageIsError] = useState(false);
-  const [busy, setBusy] = useState(false);
   const pending =
     (role === "dpf" && bundle.has_pending_for_dpf) ||
     (role === "dpa" && bundle.has_pending_for_dpa);
 
   const facultyStatus = bundle.faculty_report_status ?? null;
-  const isSubmitted = facultyStatus === "submitted" || facultyStatus === "approved";
-  const isEditing = Boolean(bundle.is_editing);
-  const canFirstSubmit =
-    !facultyStatus || facultyStatus === "draft" || facultyStatus === "rejected";
-  const submitBlockers = bundle.submit_blockers ?? [];
-  const canSubmitNow = submitBlockers.length === 0;
-
-  const submitFaculty = async () => {
-    setBusy(true);
-    setMessage("");
-    setMessageIsError(false);
-    try {
-      const res = await api<{ is_resubmit?: boolean }>(
-        `/api/reports/faculties/${bundle.faculty_id}/submit?report_date=${date}`,
-        { method: "POST" }
-      );
-      setMessage(
-        res.is_resubmit
-          ? "Строевая записка факультета обновлена. ДПА уведомлён в чате."
-          : "Строевая записка факультета отправлена. ДПА уведомлён в чате."
-      );
-      onReload();
-    } catch (e) {
-      setMessageIsError(true);
-      setMessage(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startEditing = async () => {
-    setBusy(true);
-    setMessage("");
-    setMessageIsError(false);
-    try {
-      await api(
-        `/api/reports/faculties/${bundle.faculty_id}/start-editing?report_date=${date}`,
-        { method: "POST" }
-      );
-      setMessage("Режим редактирования. Правки не уходят в чат до повторной отправки.");
-      onReload();
-    } catch (e) {
-      setMessageIsError(true);
-      setMessage(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <div className={`mb-4 rounded-lg shadow ${pending ? "ring-2 ring-amber-400" : ""}`}>
@@ -482,78 +540,6 @@ function FacultyBlock({
               />
             ))
           )}
-          {message && (
-            <p
-              className={`mt-3 text-sm px-3 py-2 rounded ${
-                messageIsError
-                  ? "text-red-800 bg-red-50 border border-red-200"
-                  : "text-blue-800 bg-blue-50"
-              }`}
-            >
-              {message}
-            </p>
-          )}
-          {role === "dpf" && submitBlockers.length > 0 && canFirstSubmit && (
-            <div className="mt-3 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              <p className="font-medium mb-1">Перед отправкой факультета:</p>
-              <ul className="list-disc pl-5 space-y-0.5">
-                {submitBlockers.map((b) => (
-                  <li key={b}>{b}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {role === "dpf" && (
-            <div className="mt-3 flex flex-wrap gap-2 items-center">
-              {canFirstSubmit && (
-                <button
-                  type="button"
-                  disabled={busy || !canSubmitNow}
-                  className="bg-vka-navy text-white px-4 py-2 rounded text-sm hover:bg-vka-navy-light disabled:opacity-50"
-                  onClick={submitFaculty}
-                >
-                  Отправить строевую записку за факультет
-                </button>
-              )}
-              {isSubmitted && !isEditing && (
-                <>
-                  <p className="text-sm text-gray-600">
-                    Строевая записка отправлена ДПА. Для правок нажмите «Редактировать».
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="bg-vka-gold text-vka-navy px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
-                    onClick={startEditing}
-                  >
-                    Редактировать строевую записку
-                  </button>
-                </>
-              )}
-              {isSubmitted && isEditing && (
-                <>
-                  <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded">
-                    Режим редактирования — изменения не уходят в чат до отправки.
-                  </p>
-                  {!canSubmitNow && submitBlockers.length > 0 && (
-                    <ul className="text-sm text-amber-900 list-disc pl-5">
-                      {submitBlockers.map((b) => (
-                        <li key={b}>{b}</li>
-                      ))}
-                    </ul>
-                  )}
-                  <button
-                    type="button"
-                    disabled={busy || !canSubmitNow}
-                    className="bg-vka-navy text-white px-4 py-2 rounded text-sm hover:bg-vka-navy-light disabled:opacity-50"
-                    onClick={submitFaculty}
-                  >
-                    Отправить строевую записку за факультет
-                  </button>
-                </>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -568,6 +554,8 @@ export function StroevkaReviewPage() {
   const role = session?.role || "";
 
   const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -619,6 +607,79 @@ export function StroevkaReviewPage() {
 
   const dpfBundle = role === "dpf" ? bundles[0] : undefined;
 
+  const facultyStatus = dpfBundle?.faculty_report_status ?? null;
+  const isFacultySubmitted =
+    facultyStatus === "submitted" || facultyStatus === "approved";
+  const isFacultyEditing = Boolean(dpfBundle?.is_editing);
+  const canFirstSubmit =
+    !facultyStatus || facultyStatus === "draft" || facultyStatus === "rejected";
+  const submitBlockers = dpfBundle?.submit_blockers ?? [];
+  const canSubmitNow = submitBlockers.length === 0;
+
+  const submitFaculty = async () => {
+    if (!dpfBundle) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await api<{ is_resubmit?: boolean }>(
+        `/api/reports/faculties/${dpfBundle.faculty_id}/submit?report_date=${reportDate}`,
+        { method: "POST" }
+      );
+      await load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const startEditing = async () => {
+    if (!dpfBundle) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await api(
+        `/api/reports/faculties/${dpfBundle.faculty_id}/start-editing?report_date=${reportDate}`,
+        { method: "POST" }
+      );
+      await load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const dpfHeaderAction =
+    dpfBundle && !loading ? (
+      canFirstSubmit ? (
+        <DpfFacultySubmitButton
+          label="Отправить строевую записку за факультет"
+          disabled={!canSubmitNow}
+          busy={actionBusy}
+          submitBlockers={submitBlockers}
+          onClick={submitFaculty}
+        />
+      ) : isFacultySubmitted && !isFacultyEditing ? (
+        <DpfFacultySubmitButton
+          label="Редактировать строевую записку"
+          disabled={false}
+          busy={actionBusy}
+          submitBlockers={[]}
+          onClick={startEditing}
+          variant="edit"
+        />
+      ) : isFacultySubmitted && isFacultyEditing ? (
+        <DpfFacultySubmitButton
+          label="Отправить строевую записку за факультет"
+          disabled={!canSubmitNow}
+          busy={actionBusy}
+          submitBlockers={submitBlockers}
+          onClick={submitFaculty}
+        />
+      ) : null
+    ) : null;
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -630,8 +691,10 @@ export function StroevkaReviewPage() {
             <SubmittedReportStatus
               status={dpfBundle.faculty_report_status ?? "draft"}
               submittedAt={dpfBundle.faculty_report_submitted_at}
+              isEditing={isFacultyEditing}
             />
           ) : null}
+          {dpfHeaderAction}
         </div>
         {role !== "dpf" && <p className="text-sm text-gray-600">Дата: {reportDate}</p>}
         {dpfBundle && !loading ? (
@@ -645,6 +708,11 @@ export function StroevkaReviewPage() {
           </div>
         ) : null}
       </div>
+      {actionError && (
+        <p className="mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+          {actionError}
+        </p>
+      )}
       {loadError && (
         <p className="mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
           {loadError}

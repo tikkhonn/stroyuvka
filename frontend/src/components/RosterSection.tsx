@@ -7,7 +7,6 @@ import {
   RosterImportPreview,
   RosterImportResult,
   api,
-  downloadFile,
   uploadApi,
 } from "../api/client";
 import { HospitalSelect } from "./HospitalSelect";
@@ -22,11 +21,49 @@ import {
   compareRanks,
   formatRank,
 } from "../constants/ranks";
+import { compareAbsenceEntries, compareDepartments } from "../utils/rosterSort";
 
 type ImportMode = "upsert" | "replace";
 type SickDraft = { person_id: number; hospital_id: number | null; note: string };
-export type RosterSortKey = "rank" | "last_name";
+export type RosterSortKey = "rank" | "department" | "last_name" | "absence";
 export type RosterSortState = { key: RosterSortKey; dir: "asc" | "desc" };
+
+function RosterSortArrows({
+  columnKey,
+  sortState,
+  onSort,
+}: {
+  columnKey: RosterSortKey;
+  sortState: RosterSortState;
+  onSort: (key: RosterSortKey, dir: "asc" | "desc") => void;
+}) {
+  const isActiveCol = sortState.key === columnKey;
+  const arrowBtnClass = (active: boolean) =>
+    `leading-none p-0 border-0 bg-transparent text-[10px] ${
+      active ? "text-vka-gold font-bold" : "text-white/45 hover:text-white/80"
+    }`;
+
+  return (
+    <span className="inline-flex flex-col ml-1 align-middle shrink-0">
+      <button
+        type="button"
+        aria-label="Сортировать по возрастанию"
+        className={arrowBtnClass(isActiveCol && sortState.dir === "asc")}
+        onClick={() => onSort(columnKey, "asc")}
+      >
+        ▲
+      </button>
+      <button
+        type="button"
+        aria-label="Сортировать по убыванию"
+        className={arrowBtnClass(isActiveCol && sortState.dir === "desc")}
+        onClick={() => onSort(columnKey, "desc")}
+      >
+        ▼
+      </button>
+    </span>
+  );
+}
 
 type Props = {
   unitId: number;
@@ -76,6 +113,7 @@ export function RosterSection({
     onOpenChange?.(next);
   };
   const [localEditing, setLocalEditing] = useState(false);
+  const [absenceEditing, setAbsenceEditing] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("duty");
@@ -102,6 +140,7 @@ export function RosterSection({
   useEffect(() => {
     if (!editable) {
       setLocalEditing(false);
+      setAbsenceEditing(false);
       setSelected(new Set());
     }
   }, [editable]);
@@ -149,33 +188,44 @@ export function RosterSection({
     if (!enableSort) return filtered;
     const rows = [...filtered];
     rows.sort((a, b) => {
-      const primary =
-        sortState.key === "rank"
-          ? compareRanks(a.rank, b.rank, sortState.dir)
-          : sortState.dir === "asc"
-            ? comparePersonNamesAsc(a, b)
-            : -comparePersonNamesAsc(a, b);
+      let primary = 0;
+      switch (sortState.key) {
+        case "rank":
+          primary = compareRanks(a.rank, b.rank, sortState.dir);
+          break;
+        case "department":
+          primary = compareDepartments(a.department_code, b.department_code, sortState.dir);
+          break;
+        case "last_name":
+          primary =
+            sortState.dir === "asc"
+              ? comparePersonNamesAsc(a, b)
+              : -comparePersonNamesAsc(a, b);
+          break;
+        case "absence":
+          primary = compareAbsenceEntries(
+            a.id,
+            b.id,
+            absenceByPersonId,
+            categories,
+            sortState.dir
+          );
+          break;
+      }
       if (primary !== 0) return primary;
       return comparePersonNamesAsc(a, b);
     });
     return rows;
-  }, [filtered, enableSort, sortState]);
+  }, [absenceByPersonId, categories, filtered, enableSort, sortState]);
 
-  const handleSortClick = (key: RosterSortKey) => {
+  const handleSortArrow = (key: RosterSortKey, dir: "asc" | "desc") => {
     setSortState((prev) => {
-      if (prev.key !== key) return { key, dir: "asc" };
-      return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
+      if (prev.key === key && prev.dir === dir) return prev;
+      return { key, dir };
     });
   };
 
-  const sortButtonClass = (active: boolean) =>
-    `rounded border px-2 py-1 text-sm transition ${
-      active
-        ? "border-vka-navy bg-vka-cream/60 text-vka-navy font-medium"
-        : "border-gray-200 text-gray-700 hover:border-vka-navy/40 hover:bg-gray-50"
-    }`;
-
-  const canSelect = editable && localEditing;
+  const canSelect = editable && absenceEditing;
   const allSelected =
     canSelect && displayPeople.length > 0 && displayPeople.every((p) => selected.has(p.id));
 
@@ -194,13 +244,35 @@ export function RosterSection({
     setSelected(next);
   };
 
+  const resetAbsenceDraft = () => {
+    setSelected(new Set());
+    setBulkNote("");
+  };
+
   const toggleLocalEditing = () => {
     if (localEditing) {
       setLocalEditing(false);
-      setSelected(new Set());
+      setNewRank("");
+      setNewFullName("");
+      setNewDepartment("");
       return;
     }
+    setAbsenceEditing(false);
+    resetAbsenceDraft();
     setLocalEditing(true);
+  };
+
+  const toggleAbsenceEditing = () => {
+    if (absenceEditing) {
+      setAbsenceEditing(false);
+      resetAbsenceDraft();
+      return;
+    }
+    setLocalEditing(false);
+    setNewRank("");
+    setNewFullName("");
+    setNewDepartment("");
+    setAbsenceEditing(true);
   };
 
   const addPerson = async (e: FormEvent) => {
@@ -250,9 +322,9 @@ export function RosterSection({
 
   const markSelected = async (e: FormEvent) => {
     e.preventDefault();
-    const ids = [...selected].filter((id) => !absenceByPersonId.has(id));
+    const ids = [...selected];
     if (ids.length === 0) {
-      onMessage("Выберите людей, которые ещё не отмечены отсутствующими");
+      onMessage("Выберите людей из списка");
       return;
     }
     const cat = categories.find((c) => c.code === bulkCategory);
@@ -366,17 +438,6 @@ export function RosterSection({
     }
   };
 
-  const exportList = async (ext: "xlsx" | "docx") => {
-    try {
-      await downloadFile(
-        `/api/attendance/${unitId}/people/export.${ext}`,
-        `список.${ext}`
-      );
-    } catch (err) {
-      onMessage(err instanceof Error ? err.message : "Ошибка экспорта");
-    }
-  };
-
   const bulkDetailRequired = Boolean(
     categories.find((c) => c.code === bulkCategory)?.detail_required
   );
@@ -419,23 +480,9 @@ export function RosterSection({
               onClick={toggleLocalEditing}
               className="rounded border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
             >
-              {localEditing ? "Готово" : "Редактировать"}
+              {localEditing ? "Готово" : "Изменить список"}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => void exportList("xlsx")}
-            className="rounded border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
-          >
-            Excel
-          </button>
-          <button
-            type="button"
-            onClick={() => void exportList("docx")}
-            className="rounded border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
-          >
-            Word
-          </button>
           {editable && (
             <>
               <input
@@ -461,136 +508,120 @@ export function RosterSection({
       {open && (
         <div className="p-4">
           <p className="text-sm text-gray-600 mb-3">
-            «По списку» равно числу активных людей. Шаблон: «Воинское звание | Кафедра | Фамилия,
-            имя, отчество» или «Воинское звание | Фамилия, имя, отчество». Звание и ФИО — полностью,
-            без сокращений и без инициалов.
+            Список можно загрузить из файла Word (.docx) или Excel (.xlsx). В таблице нужны колонки
+            «Воинское звание» и «Фамилия, имя, отчество». Кафедру укажите отдельной колонкой, если
+            она есть. Можно начать с колонки «№». Воинское звание и ФИО пишите полностью: без сокращений и
+            без инициалов.
           </p>
 
           <div className="flex flex-wrap gap-3 mb-3 items-center">
-            {enableSort ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleSortClick("rank")}
-                  className={sortButtonClass(sortState.key === "rank")}
-                >
-                  Звание{" "}
-                  {sortState.key === "rank" ? (sortState.dir === "asc" ? "↑" : "↓") : ""}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSortClick("last_name")}
-                  className={sortButtonClass(sortState.key === "last_name")}
-                >
-                  Фамилия{" "}
-                  {sortState.key === "last_name"
-                    ? sortState.dir === "asc"
-                      ? "А–Я"
-                      : "Я–А"
-                    : ""}
-                </button>
-              </>
-            ) : null}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Поиск по фамилии"
               className="border rounded px-2 py-1 text-sm"
             />
+            {editable && (
+              <button
+                type="button"
+                onClick={toggleAbsenceEditing}
+                className="rounded border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                {absenceEditing ? "Готово" : "Редактировать расход"}
+              </button>
+            )}
           </div>
 
-          {editable && (
-            <div className="space-y-3 mb-4">
-              <form
-                onSubmit={addPerson}
-                className="flex flex-wrap items-end justify-between gap-2 w-full"
-              >
-                <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Звание</label>
-                    <input
-                      list="roster-ranks"
-                      value={newRank}
-                      onChange={(e) => setNewRank(e.target.value)}
-                      className="border rounded px-2 py-1 text-sm"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">ФИО</label>
-                    <input
-                      value={newFullName}
-                      onChange={(e) => setNewFullName(e.target.value)}
-                      placeholder="Иванов Иван Иванович"
-                      className="border rounded px-2 py-1 text-sm"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Кафедра</label>
-                    <input
-                      value={newDepartment}
-                      onChange={(e) => setNewDepartment(e.target.value)}
-                      placeholder="61"
-                      className="border rounded px-2 py-1 text-sm w-20"
-                    />
-                  </div>
+          {editable && localEditing && (
+            <form
+              onSubmit={addPerson}
+              className="flex flex-wrap items-end justify-between gap-2 w-full bg-gray-50 border border-gray-200 px-3 py-2 rounded mb-4"
+            >
+              <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Воинское звание</label>
+                  <input
+                    list="roster-ranks"
+                    value={newRank}
+                    onChange={(e) => setNewRank(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm"
+                    required
+                  />
                 </div>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium shrink-0"
-                >
-                  Добавить в список
-                </button>
-              </form>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">ФИО</label>
+                  <input
+                    value={newFullName}
+                    onChange={(e) => setNewFullName(e.target.value)}
+                    placeholder="Иванов Иван Иванович"
+                    className="border rounded px-2 py-1 text-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Кафедра</label>
+                  <input
+                    value={newDepartment}
+                    onChange={(e) => setNewDepartment(e.target.value)}
+                    placeholder="61"
+                    className="border rounded px-2 py-1 text-sm w-20"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-vka-gold text-vka-navy px-3 py-2 rounded text-sm font-medium shrink-0"
+              >
+                Добавить в список
+              </button>
+            </form>
+          )}
 
-              {localEditing && (
-                <form
-                  onSubmit={markSelected}
-                  className="flex flex-wrap items-end justify-between gap-2 w-full bg-amber-50 border border-amber-200 px-3 py-2 rounded"
-                >
-                  <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
-                    <span className="text-sm text-amber-900 whitespace-nowrap pb-2">
-                      Выбрано: {selected.size}
-                    </span>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Причина отсутствия</label>
-                      <select
-                        value={bulkCategory}
-                        onChange={(e) => setBulkCategory(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                      >
-                        {categories.map((c) => (
-                          <option key={c.code} value={c.code}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {!isSickCategory(bulkCategory) && (
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Уточнение</label>
-                        <input
-                          value={bulkNote}
-                          onChange={(e) => setBulkNote(e.target.value)}
-                          placeholder={bulkDetailRequired ? "обязательно" : "необяз."}
-                          className="border rounded px-2 py-1 text-sm"
-                          required={bulkDetailRequired}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={saving || selected.size === 0}
-                    className={bulkActionBtnClass}
+          {editable && absenceEditing && (
+            <form
+              onSubmit={markSelected}
+              className="flex flex-wrap items-end justify-between gap-2 w-full bg-amber-50 border border-amber-200 px-3 py-2 rounded mb-4"
+            >
+              <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
+                <span className="text-sm text-amber-900 whitespace-nowrap pb-2">
+                  Выбрано: {selected.size}
+                </span>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Причина отсутствия</label>
+                  <select
+                    value={bulkCategory}
+                    onChange={(e) => setBulkCategory(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm"
                   >
-                    Отметить
-                  </button>
-                </form>
-              )}
-            </div>
+                    {categories.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {!isSickCategory(bulkCategory) && (
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Уточнение</label>
+                    <input
+                      value={bulkNote}
+                      onChange={(e) => setBulkNote(e.target.value)}
+                      placeholder={bulkDetailRequired ? "обязательно" : "необяз."}
+                      className="border rounded px-2 py-1 text-sm"
+                      required={bulkDetailRequired}
+                    />
+                  </div>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={saving || selected.size === 0}
+                className={bulkActionBtnClass}
+              >
+                Отметить
+              </button>
+            </form>
           )}
 
           <table className="vka-table w-full">
@@ -598,7 +629,7 @@ export function RosterSection({
               <tr>
                 {editable && (
                   <th className="w-10 align-middle">
-                    {localEditing && (
+                    {absenceEditing && (
                       <input
                         type="checkbox"
                         className={checkboxClass}
@@ -609,10 +640,54 @@ export function RosterSection({
                   </th>
                 )}
                 <th>№</th>
-                <th>Звание</th>
-                <th>Кафедра</th>
-                <th>ФИО</th>
-                <th>Причина отсутствия</th>
+                <th>
+                  <span className="inline-flex items-center">
+                    Воинское звание
+                    {enableSort ? (
+                      <RosterSortArrows
+                        columnKey="rank"
+                        sortState={sortState}
+                        onSort={handleSortArrow}
+                      />
+                    ) : null}
+                  </span>
+                </th>
+                <th>
+                  <span className="inline-flex items-center">
+                    Кафедра
+                    {enableSort ? (
+                      <RosterSortArrows
+                        columnKey="department"
+                        sortState={sortState}
+                        onSort={handleSortArrow}
+                      />
+                    ) : null}
+                  </span>
+                </th>
+                <th>
+                  <span className="inline-flex items-center">
+                    ФИО
+                    {enableSort ? (
+                      <RosterSortArrows
+                        columnKey="last_name"
+                        sortState={sortState}
+                        onSort={handleSortArrow}
+                      />
+                    ) : null}
+                  </span>
+                </th>
+                <th>
+                  <span className="inline-flex items-center">
+                    Причина отсутствия
+                    {enableSort ? (
+                      <RosterSortArrows
+                        columnKey="absence"
+                        sortState={sortState}
+                        onSort={handleSortArrow}
+                      />
+                    ) : null}
+                  </span>
+                </th>
                 {editable && <th className="w-16"></th>}
               </tr>
             </thead>
@@ -633,12 +708,11 @@ export function RosterSection({
                   <tr key={person.id} className={rowClass}>
                     {editable && (
                       <td className="w-10 align-middle">
-                        {localEditing && (
+                        {absenceEditing && (
                           <input
                             type="checkbox"
                             className={checkboxClass}
                             checked={selected.has(person.id)}
-                            disabled={absenceByPersonId.has(person.id)}
                             onChange={() => toggleOne(person.id)}
                           />
                         )}

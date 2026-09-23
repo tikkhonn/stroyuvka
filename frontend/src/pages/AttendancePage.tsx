@@ -327,7 +327,7 @@ export function AttendancePage() {
   const selectedMeta = units.find((u) => u.id === unitId);
   const canSubmitCourse = session?.role === "dpk";
   const isDpf = session?.role === "dpf";
-  const enableRosterSort = isDpf && selectedMeta?.kind === "officers";
+  const enableRosterSort = session?.role === "dpk" || session?.role === "dpf";
   const isAdmin = session?.shell === "admin";
   const showSubmittedStatus = (canSubmitCourse || isDpf) && snapshot;
   const showDutyPlaque = (canSubmitCourse || isDpf) && snapshot;
@@ -348,6 +348,31 @@ export function AttendancePage() {
     !isEditing &&
     !editable;
 
+  const unitSelector =
+    units.length > 1 ? (
+      <select
+        className="border rounded px-2 py-1 text-sm"
+        value={unitId ?? ""}
+        onChange={(e) => selectUnit(Number(e.target.value))}
+      >
+        {units.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name}
+          </option>
+        ))}
+      </select>
+    ) : null;
+
+  const submittedStatusEl = showSubmittedStatus ? (
+    <SubmittedReportStatus
+      status={snapshot!.report_status ?? "draft"}
+      submittedAt={snapshot!.report_submitted_at}
+    />
+  ) : null;
+
+  const showRightHeaderGroup =
+    showDutyPlaque || (isDpf && showSubmittedStatus) || (!isDpf && units.length > 1);
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -355,12 +380,7 @@ export function AttendancePage() {
           <h2 className="text-xl font-serif font-bold text-vka-navy">
             Расход — {snapshot?.unit_name || selectedMeta?.name || "..."}
           </h2>
-          {showSubmittedStatus ? (
-            <SubmittedReportStatus
-              status={snapshot.report_status ?? "draft"}
-              submittedAt={snapshot.report_submitted_at}
-            />
-          ) : null}
+          {isDpf ? unitSelector : submittedStatusEl}
         </div>
         {!canSubmitCourse && !isDpf && (
           <p className="text-sm text-gray-600">Дата: {reportDate}</p>
@@ -368,22 +388,10 @@ export function AttendancePage() {
         {!canSubmitCourse && !isDpf && snapshot?.report_status ? (
           <StatusBadge status={snapshot.report_status} />
         ) : null}
-        {showDutyPlaque || units.length > 1 ? (
+        {showRightHeaderGroup ? (
           <div className="ml-auto flex flex-wrap items-center gap-3">
             {showDutyPlaque ? <DutyLandlinePlaque items={dutyPlaqueItems} /> : null}
-            {units.length > 1 ? (
-              <select
-                className="border rounded px-2 py-1 text-sm"
-                value={unitId ?? ""}
-                onChange={(e) => selectUnit(Number(e.target.value))}
-              >
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+            {isDpf ? submittedStatusEl : unitSelector}
           </div>
         ) : null}
       </div>
@@ -398,8 +406,9 @@ export function AttendancePage() {
         <>
           {snapshot.total_list === 0 && (
             <div className="mb-4 p-3 bg-amber-50 text-amber-900 rounded text-sm">
-              Список подразделения пуст. Загрузите Word/Excel или добавьте людей вручную —
-              число «по списку» появится автоматически.
+              Список подразделения пуст. Загрузите файл Word (.docx) или Excel (.xlsx) с колонками
+              «Воинское звание» и «Фамилия, имя, отчество» (кафедра и «№» — по желанию) или
+              добавьте людей вручную — число «по списку» появится автоматически.
             </div>
           )}
           <SummaryCards agg={snapshot.aggregate} />
@@ -486,7 +495,7 @@ export function AttendancePage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Звание</label>
+                      <label className="block text-xs text-gray-600 mb-1">Воинское звание</label>
                       <select
                         value={newRankFilter}
                         onChange={(e) => handleRankFilterChange(e.target.value)}
@@ -563,7 +572,7 @@ export function AttendancePage() {
                   <thead>
                     <tr>
                       <th>№</th>
-                      <th>Звание</th>
+                      <th>Воинское звание</th>
                       <th>Причина отсутствия</th>
                       <th>ФИО</th>
                       {editable && absencesEditing && (

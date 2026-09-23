@@ -124,15 +124,15 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
             </h2>
             <p className="text-sm text-gray-600 mb-4">
               {shiftMode
-                ? "Введите звание, ФИО и телефон нового дежурного. Цифры расхода за сегодня останутся — их можно править."
-                : "Укажите звание, ФИО и телефон на сегодня. Карточка появится у вышестоящего дежурного в «Телефоны»."}
+                ? "Введите воинское звание, ФИО и телефон нового дежурного. Цифры расхода за сегодня останутся — их можно править."
+                : "Укажите воинское звание, ФИО и телефон на сегодня. Карточка появится у вышестоящего дежурного в «Телефоны»."}
             </p>
             {session?.display_name && (
               <p className="text-xs text-gray-500 mb-4">Пост: {session.display_name}</p>
             )}
             <form onSubmit={submit} className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-600 mb-1">Звание</label>
+                <label className="block text-xs text-gray-600 mb-1">Воинское звание</label>
                 <input
                   list="onboarding-ranks"
                   value={rank}

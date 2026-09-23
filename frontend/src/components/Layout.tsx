@@ -77,6 +77,43 @@ function navForSession(session: { shell: string; role: string }) {
   return NAV_BY_SHELL[session.shell] || [];
 }
 
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function LogOutIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
 function HeaderActions() {
   const { session, logout } = useAuth();
   if (!session) return null;
@@ -89,17 +126,28 @@ function HeaderActions() {
         <p className="text-sm font-medium text-white">{session.display_name}</p>
         <p className="text-xs text-vka-gold/90">{roleLabel}</p>
       </div>
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-vka-gold/20 ring-2 ring-vka-gold/30">
-        <span className="text-sm font-bold text-vka-gold">
-          {session.display_name.charAt(0).toUpperCase()}
-        </span>
-      </div>
-      <button
-        onClick={logout}
-        className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-gray-300 transition hover:border-vka-gold/50 hover:text-white"
+      <div
+        className="flex h-10 w-10 items-center justify-center rounded-md bg-vka-gold/20 ring-2 ring-vka-gold/30"
+        aria-hidden="true"
       >
-        Выход
-      </button>
+        <UserIcon className="h-5 w-5 text-vka-gold" />
+      </div>
+      <span className="relative inline-flex group">
+        <button
+          type="button"
+          onClick={logout}
+          aria-label="Выход"
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 text-gray-300 transition hover:border-vka-gold/50 hover:text-white"
+        >
+          <LogOutIcon className="h-5 w-5" />
+        </button>
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100"
+        >
+          Выход
+        </span>
+      </span>
     </div>
   );
 }

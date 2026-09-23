@@ -66,12 +66,12 @@ export function DutyContactEditModal({ contact, onClose, onSaved }: DutyContactE
           Редактировать карточку
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          Измените звание, ФИО или телефон. Данные обновятся в разделе «Телефоны» у вышестоящего дежурного.
+          Измените воинское звание, ФИО или телефон. Данные обновятся в разделе «Телефоны» у вышестоящего дежурного.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Звание</label>
+            <label className="block text-xs text-gray-600 mb-1">Воинское звание</label>
             <input
               list="edit-duty-ranks"
               value={rank}

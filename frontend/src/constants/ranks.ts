@@ -42,7 +42,16 @@ export function compareRanks(
   b: string | null | undefined,
   direction: "asc" | "desc"
 ): number {
-  const diff = rankSortIndex(a) - rankSortIndex(b);
+  const aIdx = rankSortIndex(a);
+  const bIdx = rankSortIndex(b);
+  const aUnknown = aIdx >= UNKNOWN_RANK_INDEX;
+  const bUnknown = bIdx >= UNKNOWN_RANK_INDEX;
+  if (aUnknown && bUnknown) {
+    return formatRank(a).localeCompare(formatRank(b), "ru");
+  }
+  if (aUnknown) return 1;
+  if (bUnknown) return -1;
+  const diff = aIdx - bIdx;
   return direction === "asc" ? diff : -diff;
 }
 

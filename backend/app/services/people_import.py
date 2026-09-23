@@ -4,7 +4,7 @@ import io
 import re
 from dataclasses import dataclass, field
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Person, Unit
@@ -29,7 +29,7 @@ from app.services.people import (
     validate_rank,
 )
 
-RANK_HEADERS = {"звание", "зв", "зв.", "rank"}
+RANK_HEADERS = {"звание", "воинское звание", "зв", "зв.", "rank"}
 FIO_HEADERS = {
     "фио",
     "fio",
@@ -338,7 +338,12 @@ def _parse_loose_line(text: str, row_number: int) -> ParsedLine | None:
         return None
     if _is_rank_header(_norm_header(line)) or _is_fio_header(_norm_header(line)):
         return None
-    if _norm_header(line) in {"звание фамилия инициалы", "звание фамилия и.о."}:
+    if _norm_header(line) in {
+        "звание фамилия инициалы",
+        "звание фамилия и.о.",
+        "воинское звание фамилия инициалы",
+        "воинское звание фамилия и.о.",
+    }:
         return None
 
     lower = line.casefold()
@@ -633,35 +638,3 @@ async def apply_import(
         deactivated=deactivated,
         total_list=total,
     )
-
-
-def export_xlsx(people: list[Person]) -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Список"
-    ws.append(["Воинское звание", "Кафедра", "Фамилия, имя, отчество"])
-    for person in people:
-        ws.append([format_rank(person.rank), person.department_code or "", display_last_name(person)])
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
-
-
-def export_docx(people: list[Person], title: str) -> bytes:
-    from docx import Document
-
-    doc = Document()
-    doc.add_heading(title, level=1)
-    table = doc.add_table(rows=1, cols=3)
-    hdr = table.rows[0].cells
-    hdr[0].text = "Воинское звание"
-    hdr[1].text = "Кафедра"
-    hdr[2].text = "Фамилия, имя, отчество"
-    for person in people:
-        cells = table.add_row().cells
-        cells[0].text = format_rank(person.rank)
-        cells[1].text = person.department_code or ""
-        cells[2].text = display_last_name(person)
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()

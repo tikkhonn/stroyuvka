@@ -1,8 +1,6 @@
 from datetime import date
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -51,7 +49,7 @@ from app.services.people import (
     person_to_read,
     update_person,
 )
-from app.services.people_import import apply_import, export_docx, export_xlsx, preview_import
+from app.services.people_import import apply_import, preview_import
 from app.services.reports import get_faculty_id_for_course
 from app.services.unit_ids import parse_course_id
 from app.ws.manager import ws_manager
@@ -553,46 +551,3 @@ async def import_people(
     )
     return result
 
-
-@router.get("/attendance/{unit_id}/people/export.xlsx")
-async def export_people_xlsx(
-    unit_id: int,
-    session: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    await ensure_schema_patches(session)
-    await assert_unit_access(session, user, unit_id)
-    unit = await session.get(Unit, unit_id)
-    if not unit or not unit.is_active:
-        raise HTTPException(404, "Подразделение не найдено или неактивно")
-    await _assert_can_view(session, user, unit, unit_id)
-    people = await list_people(session, unit_id, include_inactive=False)
-    data = export_xlsx(people)
-    filename = quote(f"{unit.name}.xlsx")
-    return Response(
-        content=data,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
-    )
-
-
-@router.get("/attendance/{unit_id}/people/export.docx")
-async def export_people_docx(
-    unit_id: int,
-    session: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    await ensure_schema_patches(session)
-    await assert_unit_access(session, user, unit_id)
-    unit = await session.get(Unit, unit_id)
-    if not unit or not unit.is_active:
-        raise HTTPException(404, "Подразделение не найдено или неактивно")
-    await _assert_can_view(session, user, unit, unit_id)
-    people = await list_people(session, unit_id, include_inactive=False)
-    data = export_docx(people, f"Список — {unit.name}")
-    filename = quote(f"{unit.name}.docx")
-    return Response(
-        content=data,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
-    )

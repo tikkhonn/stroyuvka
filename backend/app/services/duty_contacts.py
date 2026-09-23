@@ -103,7 +103,7 @@ async def register_self_contact(
     full_name = body.full_name.strip()
     phone = body.phone.strip()
     if not full_name or not phone:
-        raise ValueError("Заполните звание, ФИО и телефон")
+        raise ValueError("Заполните воинское звание, ФИО и телефон")
 
     post = await session.get(DutyPost, user.duty_post_id)
     existing = await get_self_contact_today(session, user, contact_date)
