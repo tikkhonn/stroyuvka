@@ -19,6 +19,7 @@ import { onWsEvent } from "../api/ws";
 import { formatAbsenceName, formatRank } from "../constants/ranks";
 import { formatAbsenceCategory, formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
 import { formatDateRu, todayLocal } from "../utils/date";
+import { isNamedOfficerFaculty } from "../utils/namedUnits";
 
 function absenceReasonLabel(row: AbsenceEntry): string {
   return formatAbsenceReason(
@@ -363,10 +364,12 @@ function DepartmentAbsencesTable({
   return <StroevkaAbsencesTable rows={rows} showRank={showRank} />;
 }
 
-function VariableCompositionAbsencesTable({
+function AggregatedCoursesAbsencesTable({
   courses,
+  groupColumnLabel,
 }: {
   courses: FacultyStroevkaBundle["courses"];
+  groupColumnLabel: string;
 }) {
   const rows = courses
     .filter((course) => course.absences.length > 0)
@@ -379,7 +382,7 @@ function VariableCompositionAbsencesTable({
     );
 
   return (
-    <StroevkaAbsencesTable groupColumnLabel="Курс" rows={rows} showRank />
+    <StroevkaAbsencesTable groupColumnLabel={groupColumnLabel} rows={rows} showRank />
   );
 }
 
@@ -427,11 +430,15 @@ function OfficersAbsencesTable({
   );
 }
 
-function VariableCompositionCard({
+function AggregatedCoursesCard({
   courses,
+  title,
+  groupColumnLabel,
   defaultOpen = false,
 }: {
   courses: FacultyStroevkaBundle["courses"];
+  title: string;
+  groupColumnLabel: string;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -445,7 +452,7 @@ function VariableCompositionCard({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="font-medium text-vka-navy">
-          {open ? "▼" : "▶"} Строевая записка (переменный состав)
+          {open ? "▼" : "▶"} {title}
         </span>
         <span className="text-sm text-gray-600 ml-auto">
           список {aggregate.total_list} · налицо {aggregate.present}
@@ -456,7 +463,10 @@ function VariableCompositionCard({
           <SummaryCards agg={aggregate} />
           <div className="mt-3">
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Отсутствующие</p>
-            <VariableCompositionAbsencesTable courses={courses} />
+            <AggregatedCoursesAbsencesTable
+              courses={courses}
+              groupColumnLabel={groupColumnLabel}
+            />
           </div>
         </div>
       )}
@@ -483,6 +493,8 @@ function FacultyBlock({
     (role === "dpa" && bundle.has_pending_for_dpa);
 
   const facultyStatus = bundle.faculty_report_status ?? null;
+  const namedOfficer = isNamedOfficerFaculty(bundle.faculty_id);
+  const childUnitsLabel = namedOfficer ? "Группы" : "Курсы";
 
   return (
     <div className={`mb-4 rounded-lg shadow ${pending ? "ring-2 ring-amber-400" : ""}`}>
@@ -511,18 +523,31 @@ function FacultyBlock({
       </button>
       {open && (
         <div className="bg-gray-50 p-4 rounded-b-lg">
-          <OfficersCard
-            officers={bundle.officers}
-            role={role}
-            showEditHint={role === "dpf"}
-            defaultOpen={role === "dpf"}
-          />
-          {role === "dpf" && (
-            <VariableCompositionCard courses={bundle.courses} defaultOpen={role === "dpf"} />
+          {!namedOfficer && (
+            <OfficersCard
+              officers={bundle.officers}
+              role={role}
+              showEditHint={role === "dpf"}
+              defaultOpen={role === "dpf"}
+            />
           )}
-          <p className="text-sm font-medium text-gray-700 mb-2 mt-1">Курсы</p>
+          {role === "dpf" && bundle.courses.length > 0 && (
+            <AggregatedCoursesCard
+              courses={bundle.courses}
+              title={
+                namedOfficer
+                  ? "Строевая записка (постоянный состав)"
+                  : "Строевая записка (переменный состав)"
+              }
+              groupColumnLabel={namedOfficer ? "Группа" : "Курс"}
+              defaultOpen
+            />
+          )}
+          <p className="text-sm font-medium text-gray-700 mb-2 mt-1">{childUnitsLabel}</p>
           {bundle.courses.length === 0 ? (
-            <p className="text-sm text-gray-500">Нет курсов</p>
+            <p className="text-sm text-gray-500">
+              {namedOfficer ? "Нет групп" : "Нет курсов"}
+            </p>
           ) : (
             bundle.courses.map((c) => (
               <CourseCard

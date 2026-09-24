@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Hospital, api } from "../api/client";
+import { AdminFlash, AdminPageShell } from "../components/AdminPageShell";
 
 export function AdminHospitalsPage() {
   const [items, setItems] = useState<Hospital[]>([]);
@@ -107,20 +108,10 @@ export function AdminHospitalsPage() {
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">Мед. учреждения</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        Справочник для отметки больных. Скрытое мед. учреждение нельзя выбрать заново, но старые
-        записи сохраняют название.
-      </p>
-      {message && (
-        <div className="mb-3 p-3 bg-blue-50 text-blue-800 rounded text-sm">{message}</div>
-      )}
-      {error && (
-        <div className="mb-3 p-3 bg-red-50 text-red-800 rounded text-sm">{error}</div>
-      )}
+    <AdminPageShell title="Мед. учреждения">
+      <AdminFlash message={message} error={error} />
 
-      <form onSubmit={add} className="flex flex-wrap gap-2 items-end mb-4 bg-white p-4 rounded-lg shadow border border-gray-200">
+      <form onSubmit={add} className="vka-admin-card flex flex-wrap gap-2 items-end">
         <div>
           <label className="block text-xs text-gray-600 mb-1">Название</label>
           <input
@@ -140,7 +131,7 @@ export function AdminHospitalsPage() {
         </button>
       </form>
 
-      <div className="bg-white rounded-lg shadow border border-gray-200 overflow-x-auto">
+      <div className="vka-admin-table-wrap">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left text-xs text-gray-600 uppercase tracking-wide">
@@ -216,6 +207,6 @@ export function AdminHospitalsPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </AdminPageShell>
   );
 }

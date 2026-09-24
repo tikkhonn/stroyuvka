@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
-import { AuditEntry, UnitNode, UnitRead, api } from "../api/client";
+import { LoginDaySummary, UnitNode, UnitRead, api } from "../api/client";
 import { courseDisplayName, parseCourseId } from "../lib/courseId";
+import { AdminFlash, AdminPageShell } from "../components/AdminPageShell";
 
 const TYPE_LABELS: Record<string, string> = {
   location: "расположение",
@@ -8,6 +9,13 @@ const TYPE_LABELS: Record<string, string> = {
   course: "курс",
   department: "кафедра",
 };
+
+const NAMED_UNIT_ID_MIN = 2001;
+const NAMED_UNIT_ID_MAX = 2999;
+
+function isNamedUnitNode(node: UnitNode) {
+  return Boolean(node.is_named) || (node.id >= NAMED_UNIT_ID_MIN && node.id <= NAMED_UNIT_ID_MAX);
+}
 
 function courseMeta(id: number) {
   const { faculty, course } = parseCourseId(id);
@@ -34,36 +42,46 @@ function CourseRow({
   view,
   onMove,
   onDelete,
+  officerGroup,
 }: {
   node: UnitNode;
   locations: UnitRead[];
   view: TreeView;
   onMove: (courseId: number, locationId: number) => void;
   onDelete: (courseId: number) => void;
+  officerGroup?: boolean;
 }) {
   return (
     <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
       <td className="py-2 px-3 font-mono text-xs text-vka-navy">{node.id}</td>
       <td className="py-2 px-3">
         <span className="font-medium text-vka-navy">{node.name}</span>
-        <span className="block text-xs text-gray-500">{courseMeta(node.id).label}</span>
+        {!officerGroup && (
+          <span className="block text-xs text-gray-500">{courseMeta(node.id).label}</span>
+        )}
       </td>
       {view === "faculty" && (
-        <td className="py-2 px-3 text-xs text-gray-600">{node.location_name || "—"}</td>
+        <td className="py-2 px-3 text-xs text-gray-600">
+          {officerGroup ? "—" : node.location_name || "—"}
+        </td>
       )}
       <td className="py-2 px-3 text-xs text-vka-gold">dpk-{node.id}</td>
       <td className="py-2 px-3">
-        <select
-          className="text-xs border rounded px-2 py-1"
-          value={node.parent_id ?? node.location_id ?? ""}
-          onChange={(e) => onMove(node.id, Number(e.target.value))}
-        >
-          {locations.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
+        {officerGroup ? (
+          <span className="text-xs text-gray-400">—</span>
+        ) : (
+          <select
+            className="text-xs border rounded px-2 py-1"
+            value={node.parent_id ?? node.location_id ?? ""}
+            onChange={(e) => onMove(node.id, Number(e.target.value))}
+          >
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        )}
       </td>
       <td className="py-2 px-3">
         <button
@@ -99,6 +117,9 @@ function CollapsibleGroup({
   onMoveCourse,
   onDeleteCourse,
   onDeleteFaculty,
+  onDeleteNamedUnit,
+  onAddOfficerGroup,
+  onDeleteOfficerGroup,
 }: {
   node: UnitNode;
   view: TreeView;
@@ -108,14 +129,32 @@ function CollapsibleGroup({
   onMoveCourse: (courseId: number, locationId: number) => void;
   onDeleteCourse: (courseId: number) => void;
   onDeleteFaculty: (facultyId: number) => void;
+  onDeleteNamedUnit: (unitId: number) => void;
+  onAddOfficerGroup: (facultyId: number, name: string) => Promise<void>;
+  onDeleteOfficerGroup: (groupId: number) => void;
 }) {
+  const [groupName, setGroupName] = useState("");
+  const [addingGroup, setAddingGroup] = useState(false);
   const typeStr = String(node.type);
   const isFaculty = typeStr === "faculty";
+  const isNamed = isFaculty && isNamedUnitNode(node);
   const courses = node.children?.filter((c) => String(c.type) === "course") ?? [];
   const departments = node.children?.filter((c) => String(c.type) === "department") ?? [];
 
+  const submitGroup = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!groupName.trim()) return;
+    setAddingGroup(true);
+    try {
+      await onAddOfficerGroup(node.id, groupName.trim());
+      setGroupName("");
+    } finally {
+      setAddingGroup(false);
+    }
+  };
+
   return (
-    <div className="border border-gray-200 rounded-lg mb-3 overflow-hidden bg-white shadow-sm">
+    <div className="vka-admin-card !p-0 mb-3 overflow-hidden">
       <button
         type="button"
         className="w-full flex flex-wrap items-center gap-3 px-4 py-3 text-left bg-vka-navy/5 hover:bg-vka-navy/10 transition"
@@ -127,15 +166,28 @@ function CollapsibleGroup({
         </span>
         <span className="font-serif font-semibold text-vka-navy">{node.name}</span>
         <span className="text-xs text-gray-500">
-          {isFaculty ? "факультет" : TYPE_LABELS[typeStr] || typeStr}
+          {isNamed
+            ? "именованное подразделение"
+            : isFaculty
+              ? "факультет"
+              : TYPE_LABELS[typeStr] || typeStr}
         </span>
+        {isNamed && (
+          <span className="text-xs bg-vka-gold/15 text-vka-navy px-2 py-0.5 rounded">
+            постоянный состав
+          </span>
+        )}
         <span className="text-xs text-gray-500">
-          {courses.length
-            ? pluralCourses(courses.length) +
-              (departments.length ? ` · ${departments.length} каф.` : "")
-            : departments.length
-              ? `${departments.length} каф.`
-              : "пусто"}
+          {isNamed
+            ? courses.length
+              ? `${courses.length} групп`
+              : "групп пока нет"
+            : courses.length
+              ? pluralCourses(courses.length) +
+                (departments.length ? ` · ${departments.length} каф.` : "")
+              : departments.length
+                ? `${departments.length} каф.`
+                : "пусто"}
         </span>
         {isFaculty && (
           <span className="text-xs text-vka-gold">логин dpf-{node.id}</span>
@@ -145,22 +197,53 @@ function CollapsibleGroup({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteFaculty(node.id);
+              if (isNamed) onDeleteNamedUnit(node.id);
+              else onDeleteFaculty(node.id);
             }}
             className="ml-auto text-xs text-red-600 hover:underline"
           >
-            Удалить факультет
+            {isNamed ? "Удалить подразделение" : "Удалить факультет"}
           </button>
         )}
       </button>
 
       {open && (
         <div className="border-t border-gray-200">
-          {childCount(node) === 0 ? (
+          {isNamed && (
+            <form
+              onSubmit={submitGroup}
+              className="px-4 py-3 flex flex-wrap gap-2 items-end border-b border-gray-100 bg-gray-50/80"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="min-w-[200px] flex-1">
+                <label className="block text-xs text-gray-600 mb-1">Группа офицеров</label>
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="Управление, 1 отделение…"
+                  className="border rounded px-2 py-1 w-full max-w-md text-sm"
+                  maxLength={255}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={addingGroup || !groupName.trim()}
+                className="vka-admin-form-btn vka-admin-form-btn--gold text-sm"
+              >
+                Добавить группу
+              </button>
+            </form>
+          )}
+          {!isNamed && childCount(node) === 0 ? (
             <p className="px-4 py-6 text-sm text-gray-500 text-center">
               {typeStr === "location"
                 ? "В этом расположении пока нет курсов"
                 : "В факультете пока нет курсов и кафедр"}
+            </p>
+          ) : isNamed && courses.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-500 text-center">
+              Добавьте группу — для каждой создаётся пост ДПК
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -185,7 +268,8 @@ function CollapsibleGroup({
                       locations={locations}
                       view={view}
                       onMove={onMoveCourse}
-                      onDelete={onDeleteCourse}
+                      onDelete={isNamed ? onDeleteOfficerGroup : onDeleteCourse}
+                      officerGroup={isNamed}
                     />
                   ))}
                   {departments.map((d) => (
@@ -209,7 +293,7 @@ export function AdminUnitsPage() {
   const [courseFaculty, setCourseFaculty] = useState(1);
   const [courseNumber, setCourseNumber] = useState(1);
   const [courseLocationId, setCourseLocationId] = useState(1001);
-  const [facultyNumber, setFacultyNumber] = useState(1);
+  const [namedUnitName, setNamedUnitName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -303,16 +387,59 @@ export function AdminUnitsPage() {
     }
   };
 
-  const addFaculty = async (e: FormEvent) => {
+  const addNamedUnit = async (e: FormEvent) => {
     e.preventDefault();
     setMessage("");
     setError("");
     try {
-      await api("/api/units/faculties", {
+      const unit = await api<UnitRead>("/api/units/named", {
         method: "POST",
-        body: JSON.stringify({ faculty_number: facultyNumber }),
+        body: JSON.stringify({ name: namedUnitName.trim() }),
       });
-      setMessage(`Факультет №${facultyNumber} создан (без курсов)`);
+      setMessage(`Подразделение «${unit.name}» создано (id ${unit.id})`);
+      setNamedUnitName("");
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    }
+  };
+
+  const addOfficerGroup = async (facultyId: number, name: string) => {
+    setMessage("");
+    setError("");
+    try {
+      const group = await api<UnitRead>(`/api/units/named/${facultyId}/groups`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      setMessage(`Группа «${group.name}» создана (id ${group.id}, dpk-${group.id})`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+      throw err;
+    }
+  };
+
+  const deleteOfficerGroup = async (groupId: number) => {
+    if (!confirm(`Удалить группу id ${groupId}?`)) return;
+    setMessage("");
+    setError("");
+    try {
+      await api(`/api/units/named/groups/${groupId}`, { method: "DELETE" });
+      setMessage(`Группа id ${groupId} удалена`);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    }
+  };
+
+  const deleteNamedUnit = async (unitId: number) => {
+    if (!confirm(`Удалить подразделение id ${unitId}?`)) return;
+    setMessage("");
+    setError("");
+    try {
+      await api(`/api/units/named/${unitId}`, { method: "DELETE" });
+      setMessage(`Подразделение id ${unitId} удалено`);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -359,19 +486,10 @@ export function AdminUnitsPage() {
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-2">ОШС</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        ID курса = факультет × 10 + год (14 = 14 курс, 63 = 63 курс). Расположения:{" "}
-        <strong>1001 Академия</strong>, 1002 ВГ №6 (Пушкин), 1003 ВГ №61 (Лехтуси). Факультет без
-        расположения;
-        курс привязан к расположению. Расход факта = все его курсы; расположения — отдельный
-        срез; «вся академия» = все курсы + офицеры.
-      </p>
-
+    <AdminPageShell title="ОШС">
       <form
         onSubmit={addCourse}
-        className="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-end"
+        className="vka-admin-card flex flex-wrap gap-3 items-end"
       >
         <div>
           <label className="block text-xs text-gray-600 mb-1">Факультет</label>
@@ -427,29 +545,31 @@ export function AdminUnitsPage() {
       </form>
 
       <form
-        onSubmit={addFaculty}
-        className="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-end"
+        onSubmit={addNamedUnit}
+        className="vka-admin-card flex flex-wrap gap-3 items-end"
       >
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">Пустой факультет</label>
+        <div className="min-w-[220px]">
+          <label className="block text-xs text-gray-600 mb-1">
+            Подразделение постоянного состава
+          </label>
           <input
-            type="number"
-            min={1}
-            max={99}
-            value={facultyNumber}
-            onChange={(e) => setFacultyNumber(Number(e.target.value))}
-            className="border rounded px-2 py-1 w-24"
+            type="text"
+            value={namedUnitName}
+            onChange={(e) => setNamedUnitName(e.target.value)}
+            placeholder="Спецфакультет ВИНИ, Управление…"
+            className="border rounded px-2 py-1 w-full max-w-md"
+            maxLength={255}
+            required
           />
         </div>
-        <button type="submit" className="vka-admin-form-btn vka-admin-form-btn--navy">
-          Создать факультет
+        <button type="submit" className="vka-admin-form-btn vka-admin-form-btn--gold">
+          Добавить подразделение
         </button>
       </form>
 
-      {message && <p className="text-sm text-green-700 mb-2">{message}</p>}
-      {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+      <AdminFlash message={message} error={error} />
 
-      <div className="mb-4 flex flex-wrap gap-2 items-center">
+      <div className="vka-admin-card flex flex-wrap gap-2 items-center !py-3">
         <button
           type="button"
           onClick={() => setView("location")}
@@ -491,7 +611,7 @@ export function AdminUnitsPage() {
           onClick={async () => {
             if (
               !confirm(
-                "Сбросить ОШС? Расположения 1001–1003, факультеты 1–9, все курсы будут удалены."
+                "Сбросить ОШС? Расположения 1001–1003, факультеты 1–9, все курсы будут удалены. Именованные подразделения (id 2001+) не затрагиваются."
               )
             )
               return;
@@ -511,7 +631,7 @@ export function AdminUnitsPage() {
 
       <div className="space-y-0">
         {tree.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center text-sm text-gray-500">
+          <div className="vka-admin-card py-10 text-center text-sm text-gray-500">
             Подразделений пока нет
           </div>
         ) : (
@@ -526,46 +646,119 @@ export function AdminUnitsPage() {
               onMoveCourse={moveCourse}
               onDeleteCourse={deleteCourse}
               onDeleteFaculty={deleteFaculty}
+              onDeleteNamedUnit={deleteNamedUnit}
+              onAddOfficerGroup={addOfficerGroup}
+              onDeleteOfficerGroup={deleteOfficerGroup}
             />
           ))
         )}
       </div>
+    </AdminPageShell>
+  );
+}
+
+function loginActorLabel(actorKind: string): string {
+  return actorKind === "duty_post" ? "Дежурный" : "Пользователь";
+}
+
+function formatLoginDayTitle(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function pluralPeople(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "человек";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "человека";
+  return "человек";
+}
+
+function LoginDayCard({ day }: { day: LoginDaySummary }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="vka-admin-card !p-0 overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-vka-navy text-sm shrink-0">{open ? "▼" : "▶"}</span>
+        <span className="font-medium text-vka-navy capitalize">{formatLoginDayTitle(day.date)}</span>
+        <span className="ml-auto text-sm text-gray-600">
+          {day.unique_count} {pluralPeople(day.unique_count)}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-gray-100">
+          <table className="vka-table w-full text-sm">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Тип</th>
+                <th>Первый вход</th>
+              </tr>
+            </thead>
+            <tbody>
+              {day.entries.map((entry) => (
+                <tr key={`${entry.actor_kind}-${entry.actor_id}`}>
+                  <td className="font-medium text-vka-navy">{entry.actor_name}</td>
+                  <td>{loginActorLabel(entry.actor_kind)}</td>
+                  <td className="whitespace-nowrap">
+                    {new Date(entry.first_login_at).toLocaleString("ru-RU", {
+                      timeZone: "Europe/Moscow",
+                    })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
 export function AuditPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [days, setDays] = useState<LoginDaySummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api<AuditEntry[]>("/api/audit").then(setEntries).catch(() => {});
+    setLoading(true);
+    setError("");
+    api<LoginDaySummary[]>("/api/audit/login-days?days=30")
+      .then(setDays)
+      .catch((e) => {
+        setDays([]);
+        setError(e instanceof Error ? e.message : "Не удалось загрузить журнал");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   return (
-    <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">Журнал действий</h2>
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
-        <table className="vka-table w-full">
-          <thead>
-            <tr>
-              <th>Время</th>
-              <th>Оператор</th>
-              <th>Действие</th>
-              <th>Детали</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e) => (
-              <tr key={e.id}>
-                <td>{new Date(e.created_at).toLocaleString("ru-RU")}</td>
-                <td>{e.actor_name}</td>
-                <td>{e.action}</td>
-                <td>{e.details || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <AdminPageShell title="Журнал входов">
+      <AdminFlash error={error} />
+      {loading ? (
+        <p className="text-sm text-gray-500">Загрузка…</p>
+      ) : days.length === 0 ? (
+        <div className="vka-admin-card py-10 text-center text-sm text-gray-500">
+          За этот период входов не было
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {days.map((day) => (
+            <LoginDayCard key={day.date} day={day} />
+          ))}
+        </div>
+      )}
+    </AdminPageShell>
   );
 }

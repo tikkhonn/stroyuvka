@@ -350,6 +350,7 @@ export interface ChessboardSickEntry {
   faculty_name?: string | null;
   location_id?: number | null;
   location_name?: string | null;
+  is_faculty_level_roster?: boolean;
   rank: string;
   last_name: string;
   note: string | null;
@@ -487,6 +488,8 @@ export interface UnitNode {
   is_active: boolean;
   location_id?: number | null;
   location_name?: string | null;
+  is_named?: boolean;
+  composition?: "permanent" | "variable" | null;
   children?: UnitNode[];
 }
 
@@ -496,4 +499,17 @@ export interface AuditEntry {
   action: string;
   details: string | null;
   created_at: string;
+}
+
+export interface LoginDayEntry {
+  actor_kind: string;
+  actor_id: number;
+  actor_name: string;
+  first_login_at: string;
+}
+
+export interface LoginDaySummary {
+  date: string;
+  unique_count: number;
+  entries: LoginDayEntry[];
 }

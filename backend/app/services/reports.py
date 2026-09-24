@@ -28,6 +28,12 @@ from app.services.org import (
     get_courses_for_location,
     get_faculty_for_unit,
 )
+from app.services.unit_ids import is_named_unit_id
+from app.services.unit_labels import (
+    chessboard_faculty_subrow_name,
+    faculty_roster_blocker_label,
+    sick_entry_labels_for_faculty_roster,
+)
 from app.services.unit_ids import LOCATION_NAMES
 from app.services.people import format_rank
 
@@ -174,9 +180,14 @@ async def faculty_submit_blockers(
         hospital_msg = await sick_without_hospital_message(session, course.id, report_date)
         if hospital_msg:
             blockers.append(f"{course.name}: {hospital_msg}")
-    hospital_msg = await sick_without_hospital_message(session, faculty_id, report_date)
-    if hospital_msg:
-        blockers.append(f"Офицеры: {hospital_msg}")
+    if not is_named_unit_id(faculty_id):
+        faculty = await session.get(Unit, faculty_id)
+        roster_label = faculty_roster_blocker_label(faculty) if faculty else "Офицеры"
+        hospital_msg = await sick_without_hospital_message(session, faculty_id, report_date)
+        if hospital_msg:
+            blockers.append(f"{roster_label}: {hospital_msg}")
+    elif not courses:
+        blockers.append("Добавьте группу офицеров в подразделение")
     return blockers
 
 
@@ -199,13 +210,15 @@ async def submit_faculty_report(
     if blockers:
         raise ValueError(blockers[0])
 
-    await assert_unit_sick_have_hospitals(session, faculty_id, report_date)
     courses = await get_courses_for_faculty(session, faculty_id)
+    if not is_named_unit_id(faculty_id):
+        await assert_unit_sick_have_hospitals(session, faculty_id, report_date)
     for course in courses:
         await assert_unit_sick_have_hospitals(session, course.id, report_date)
 
-    officer_report = await _get_or_create_officer_report(session, faculty_id, report_date)
-    officer_report.status = ReportStatus.SUBMITTED
+    if not is_named_unit_id(faculty_id):
+        officer_report = await _get_or_create_officer_report(session, faculty_id, report_date)
+        officer_report.status = ReportStatus.SUBMITTED
 
     faculty_report = await _get_or_create_faculty_report(session, faculty_id, report_date)
     is_resubmit = faculty_report.status in (ReportStatus.SUBMITTED, ReportStatus.APPROVED)
@@ -412,6 +425,29 @@ async def build_chessboard_faculty(
     rows: list[ChessboardRow] = []
 
     for faculty in sorted(faculties, key=lambda f: f.id):
+        courses = await get_courses_for_faculty(session, faculty.id)
+
+        if is_named_unit_id(faculty.id):
+            for course in courses:
+                agg = await compute_aggregate_for_unit(session, course.id, report_date)
+                cr = await _course_report(session, course.id, report_date)
+                rows.append(
+                    _row_from_agg(
+                        faculty_id=faculty.id,
+                        faculty_name=faculty.name,
+                        course_id=course.id,
+                        course_name=course.name,
+                        agg=agg,
+                        status=cr.status if cr else ReportStatus.DRAFT,
+                        location_id=None,
+                        location_name=None,
+                        row_kind="course",
+                        changes_pending_dpf=bool(cr.changes_pending_dpf) if cr else False,
+                        changes_pending_dpa=bool(cr.changes_pending_dpa) if cr else False,
+                    )
+                )
+            continue
+
         officer_agg = await compute_aggregate_for_unit(session, faculty.id, report_date)
         fr_result = await session.execute(
             select(FacultyReport).where(
@@ -437,7 +473,7 @@ async def build_chessboard_faculty(
                 faculty_id=faculty.id,
                 faculty_name=faculty.name,
                 course_id=None,
-                course_name="Офицеры",
+                course_name=chessboard_faculty_subrow_name(faculty),
                 agg=officer_agg,
                 status=officer_status,
                 is_officers=True,
@@ -445,7 +481,6 @@ async def build_chessboard_faculty(
             )
         )
 
-        courses = await get_courses_for_faculty(session, faculty.id)
         for course in courses:
             agg = await compute_aggregate_for_unit(session, course.id, report_date)
             loc = locations.get(course.parent_id) if course.parent_id else None
@@ -617,6 +652,9 @@ async def build_chessboard_sick_summary(
                 by_loc[loc_id] += 1
 
     for faculty in faculties:
+        if is_named_unit_id(faculty.id):
+            continue
+        unit_name, location_name, is_roster = sick_entry_labels_for_faculty_roster(faculty)
         for entry in await list_absence_entries(session, faculty.id, report_date):
             if _normalize_code(entry.category_code) != AbsenceCategoryCode.SICK:
                 continue
@@ -624,11 +662,12 @@ async def build_chessboard_sick_summary(
                 ChessboardSickEntry(
                     id=entry.id,
                     unit_id=faculty.id,
-                    unit_name=f"Офицеры ({faculty.name})",
+                    unit_name=unit_name,
                     faculty_id=faculty.id,
                     faculty_name=faculty.name,
                     location_id=None,
-                    location_name="Офицеры",
+                    location_name=location_name,
+                    is_faculty_level_roster=is_roster,
                     rank=format_rank(entry.rank or ""),
                     last_name=entry.last_name,
                     note=entry.note,

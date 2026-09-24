@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import UnitType
 from app.models import Unit
-from app.services.unit_ids import parse_course_id
+from app.services.unit_ids import is_named_unit_id, parse_course_id
 
 
 def _course_belongs_to_faculty(course_unit_id: int, faculty_unit_id: int) -> bool:
@@ -179,5 +179,9 @@ async def build_faculty_tree(session: AsyncSession) -> list[dict]:
             children.append(n)
         for d in sorted(fac_depts, key=lambda x: x.id):
             children.append(_unit_node(d))
-        tree.append(_unit_node(fac, children))
+        node = _unit_node(fac, children)
+        if is_named_unit_id(fac.id):
+            node["is_named"] = True
+            node["composition"] = "permanent"
+        tree.append(node)
     return tree

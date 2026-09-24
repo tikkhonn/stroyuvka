@@ -6,20 +6,43 @@ from app.core.enums import UnitType
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_shell
 from app.models import Unit
-from app.schemas import AuthUser, CourseBulkCreate, CourseBulkResult, CourseBulkSkippedItem, CourseCreate, CourseMove, FacultyCreate, UnitCreate, UnitRead, UnitUpdate
+from app.schemas import (
+    AuthUser,
+    CourseBulkCreate,
+    CourseBulkResult,
+    CourseBulkSkippedItem,
+    CourseCreate,
+    CourseMove,
+    FacultyCreate,
+    NamedUnitCreate,
+    OfficerGroupCreate,
+    UnitCreate,
+    UnitRead,
+    UnitUpdate,
+)
 from app.services.audit import log_action
 from app.services.faculty_admin import (
     create_course,
     create_courses_bulk,
     create_faculty,
+    create_named_unit,
+    create_officer_group,
     delete_course,
     delete_faculty,
+    delete_named_unit,
+    delete_officer_group,
     delete_all_courses,
     move_course,
     reset_osh_structure,
 )
 from app.services.org import build_faculty_tree, build_location_tree, build_unit_tree
-from app.services.unit_ids import LOCATION_NAMES, course_id, parse_course_id
+from app.services.unit_ids import (
+    LOCATION_NAMES,
+    NAMED_UNIT_ID_BASE,
+    NAMED_UNIT_ID_MAX,
+    course_id,
+    parse_course_id,
+)
 
 router = APIRouter(prefix="/units", tags=["units"])
 
@@ -95,6 +118,7 @@ async def id_scheme(user: AuthUser = Depends(get_current_user)):
         "faculty": "id = номер факультета, без расположения",
         "course": "id = факультет×10 + год (1–5); parent = расположение",
         "department": "id = факультет×10; parent = факультет",
+        "named_unit": f"id = {NAMED_UNIT_ID_BASE}..{NAMED_UNIT_ID_MAX}, автовыдача",
         "examples": [
             {"faculty": 1, "course": 4, "course_id": course_id(1, 4)},
             {"faculty": 6, "course": 3, "course_id": course_id(6, 3)},
@@ -109,6 +133,97 @@ async def list_units(
 ):
     result = await session.execute(select(Unit).where(Unit.is_active.is_(True)).order_by(Unit.id))
     return list(result.scalars().all())
+
+
+@router.post("/named", response_model=UnitRead)
+async def add_named_unit(
+    body: NamedUnitCreate,
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_shell("admin")),
+):
+    try:
+        unit = await create_named_unit(session, body.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    await log_action(
+        session,
+        user.auth_kind,
+        user.user_id or 0,
+        user.display_name,
+        "create_named_unit",
+        "unit",
+        unit.id,
+        unit.name,
+    )
+    return unit
+
+
+@router.delete("/named/{unit_id}")
+async def remove_named_unit(
+    unit_id: int,
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_shell("admin")),
+):
+    try:
+        await delete_named_unit(session, unit_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    await log_action(
+        session,
+        user.auth_kind,
+        user.user_id or 0,
+        user.display_name,
+        "delete_named_unit",
+        "unit",
+        unit_id,
+    )
+    return {"ok": True, "unit_id": unit_id}
+
+
+@router.post("/named/{faculty_id}/groups", response_model=UnitRead)
+async def add_officer_group(
+    faculty_id: int,
+    body: OfficerGroupCreate,
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_shell("admin")),
+):
+    try:
+        group = await create_officer_group(session, faculty_id, body.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    await log_action(
+        session,
+        user.auth_kind,
+        user.user_id or 0,
+        user.display_name,
+        "create_officer_group",
+        "unit",
+        group.id,
+        group.name,
+    )
+    return group
+
+
+@router.delete("/named/groups/{group_id}")
+async def remove_officer_group(
+    group_id: int,
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_shell("admin")),
+):
+    try:
+        await delete_officer_group(session, group_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    await log_action(
+        session,
+        user.auth_kind,
+        user.user_id or 0,
+        user.display_name,
+        "delete_officer_group",
+        "unit",
+        group_id,
+    )
+    return {"ok": True, "group_id": group_id}
 
 
 @router.post("/faculties", response_model=UnitRead)

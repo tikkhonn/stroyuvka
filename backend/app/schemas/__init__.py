@@ -71,6 +71,14 @@ class CourseMove(BaseModel):
     location_id: int = Field(description="id расположения")
 
 
+class NamedUnitCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class OfficerGroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
 class UnitCreate(BaseModel):
     parent_id: int | None = None
     type: UnitType
@@ -90,6 +98,7 @@ class UnitRead(ORMModel):
     parent_id: int | None
     type: UnitType
     name: str
+    composition: Composition | None = None
     is_active: bool
 
 
@@ -395,6 +404,7 @@ class ChessboardSickEntry(BaseModel):
     faculty_name: str | None = None
     location_id: int | None = None
     location_name: str | None = None
+    is_faculty_level_roster: bool = False
     rank: str
     last_name: str
     note: str | None = None
@@ -638,6 +648,19 @@ class AuditLogRead(ORMModel):
     entity_id: int | None
     details: str | None
     created_at: datetime
+
+
+class LoginDayEntryRead(BaseModel):
+    actor_kind: str
+    actor_id: int
+    actor_name: str
+    first_login_at: datetime
+
+
+class LoginDaySummaryRead(BaseModel):
+    date: date
+    unique_count: int
+    entries: list[LoginDayEntryRead]
 
 
 # --- Users ---

@@ -40,6 +40,8 @@ from app.services.attendance import (
 )
 from app.services.audit import log_action
 from app.services.org import get_courses_for_faculty, get_faculty_for_unit
+from app.services.unit_ids import is_named_unit_id
+from app.services.unit_labels import attendance_option_name_for_faculty_roster
 from app.services.people import (
     create_person,
     deactivate_person,
@@ -274,9 +276,23 @@ async def list_attendance_units(
             )
         ).scalars().all()
         for fac in faculties:
+            if is_named_unit_id(fac.id):
+                for course in await get_courses_for_faculty(session, fac.id):
+                    options.append(
+                        AttendanceUnitOption(
+                            id=course.id,
+                            name=f"{fac.name} · {course.name}",
+                            type=course.type,
+                            kind="course",
+                        )
+                    )
+                continue
             options.append(
                 AttendanceUnitOption(
-                    id=fac.id, name=f"Офицеры · {fac.name}", type=fac.type, kind="officers"
+                    id=fac.id,
+                    name=attendance_option_name_for_faculty_roster(fac),
+                    type=fac.type,
+                    kind="officers",
                 )
             )
             for course in await get_courses_for_faculty(session, fac.id):
@@ -296,9 +312,23 @@ async def list_attendance_units(
     if user.auth_kind == AuthKind.DUTY_POST.value and user.post_type == DutyPostType.DPF.value:
         unit = await session.get(Unit, user.unit_id) if user.unit_id else None
         if unit:
+            if is_named_unit_id(unit.id):
+                for course in await get_courses_for_faculty(session, unit.id):
+                    options.append(
+                        AttendanceUnitOption(
+                            id=course.id,
+                            name=course.name,
+                            type=course.type,
+                            kind="course",
+                        )
+                    )
+                return options
             options.append(
                 AttendanceUnitOption(
-                    id=unit.id, name=f"Офицеры · {unit.name}", type=unit.type, kind="officers"
+                    id=unit.id,
+                    name=attendance_option_name_for_faculty_roster(unit),
+                    type=unit.type,
+                    kind="officers",
                 )
             )
             for course in await get_courses_for_faculty(session, unit.id):

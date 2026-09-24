@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthSession } from "../api/client";
 import { ChatUnreadProvider, useChatUnread } from "../context/ChatUnreadContext";
@@ -48,8 +48,6 @@ const NAV_BY_SHELL: Record<string, { to: string; label: string }[]> = {
     { to: "/attendance", label: "Расход" },
     { to: "/admin/duty-contacts", label: "Дежурные" },
     { to: "/audit", label: "Журнал" },
-    { to: "/documentation", label: "Документация" },
-    { to: "/help", label: "Инструкция" },
   ],
   chief: [
     { to: "/overview", label: "Строевая записка" },
@@ -290,7 +288,7 @@ function Footer() {
   );
 }
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout() {
   const { session } = useAuth();
   const [dpfPrintOpen, setDpfPrintOpen] = useState(false);
 
@@ -299,7 +297,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <DutyOnboardingProvider>
         <ChatUnreadProvider>
           <Header onDpfPrint={() => setDpfPrintOpen(true)} />
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">{children}</main>
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
+            <Outlet />
+          </main>
           {session?.role === "dpf" ? (
             <DpfPrintModal
               open={dpfPrintOpen}

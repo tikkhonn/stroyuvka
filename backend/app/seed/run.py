@@ -140,7 +140,20 @@ async def ensure_chief_user() -> None:
 
 
 async def main() -> None:
+    from app.services.attendance import ensure_schema_patches
+    from app.services.chat_attachments import ensure_chat_attachment_schema
+    from app.services.duty_auth import ensure_duty_post_schema
+    from app.services.duty_contacts import ensure_duty_contact_schema
+    from app.services.people import migrate_rank_abbreviations
+
     await init_db()
+    async with async_session_factory() as session:
+        await ensure_schema_patches(session)
+        await ensure_duty_post_schema(session)
+        await ensure_duty_contact_schema(session)
+        await ensure_chat_attachment_schema(session)
+        await migrate_rank_abbreviations(session)
+        await session.commit()
     await seed_if_empty()
 
 

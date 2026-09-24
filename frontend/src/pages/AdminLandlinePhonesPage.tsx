@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { LandlinePhone, api } from "../api/client";
+import { AdminFlash, AdminPageShell } from "../components/AdminPageShell";
 
 type DutyFormScope = "" | NonNullable<LandlinePhone["duty_scope"]>;
 type Drafts = Record<
@@ -183,23 +184,16 @@ export function AdminLandlinePhonesPage() {
   const ordered = [...items].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
 
   return (
-    <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-4">Стационарные телефоны</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        Раздел доступен только администратору. Для плашек у дежурных выберите назначение:{" "}
-        <strong>ДПА</strong> (один на всю академию), <strong>ДПФ</strong> (учебный корпус — для
-        ДПК, укажите номер факультета), <strong>Начальник факультета</strong> (для ДПФ, укажите
-        номер факультета). Номер факультета — это цифра в id курса: у «63 курс» факультет{" "}
-        <strong>6</strong>, у «21 курс» — <strong>2</strong>.
+    <AdminPageShell title="Стационарные телефоны">
+      <p className="text-sm text-gray-600 -mt-2">
+        Для плашек у дежурных выберите назначение: ДПА, ДПФ (укажите № факультета) или начальник
+        факультета.
       </p>
-      {message && (
-        <div className="mb-3 p-3 bg-blue-50 text-blue-800 rounded text-sm">{message}</div>
-      )}
-      {error && <div className="mb-3 p-3 bg-red-50 text-red-800 rounded text-sm">{error}</div>}
+      <AdminFlash message={message} error={error} />
 
       <form
         onSubmit={add}
-        className="flex flex-wrap items-end justify-between gap-2 mb-4 bg-white p-4 rounded-lg shadow border border-gray-200 w-full"
+        className="vka-admin-card flex flex-wrap items-end justify-between gap-2 w-full"
       >
         <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
           <div>
@@ -260,7 +254,7 @@ export function AdminLandlinePhonesPage() {
         </button>
       </form>
 
-      <div className="bg-white rounded-lg shadow border border-gray-200 overflow-x-auto">
+      <div className="vka-admin-table-wrap">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left text-xs text-gray-600 uppercase tracking-wide">
@@ -426,6 +420,6 @@ export function AdminLandlinePhonesPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </AdminPageShell>
   );
 }

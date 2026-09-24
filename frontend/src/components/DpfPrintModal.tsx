@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AttendanceSnapshot, DepartmentStroevkaSummary, api } from "../api/client";
 import { todayLocal } from "../utils/date";
 import { openDutyStroevkaPrint } from "../utils/stroevayaPrint";
+import { isNamedOfficerFaculty } from "../utils/namedUnits";
 
 export type DpfPrintChoice =
   | { kind: "all" }
@@ -102,10 +103,20 @@ export function DpfPrintModal({ open, onClose, onPrinted, facultyId }: DpfPrintM
     }
   };
 
+  const namedOfficer = facultyId != null && isNamedOfficerFaculty(facultyId);
   const options: { value: string; label: string }[] = [
-    { value: "all", label: "Строевая записка за весь факультет" },
-    { value: "variable", label: "Строевая записка переменного состава" },
-    { value: "permanent", label: "Строевая записка постоянного состава" },
+    {
+      value: "all",
+      label: namedOfficer
+        ? "Строевая записка за всё подразделение"
+        : "Строевая записка за весь факультет",
+    },
+    ...(namedOfficer
+      ? []
+      : [
+          { value: "variable", label: "Строевая записка переменного состава" },
+          { value: "permanent", label: "Строевая записка постоянного состава" },
+        ]),
     ...departments.map((dept) => ({
       value: choiceValue({ kind: "department", code: dept.code! }),
       label: `Строевая записка — ${dept.name}`,

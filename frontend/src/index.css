@@ -159,6 +159,30 @@
   @apply bg-vka-navy text-white hover:bg-vka-navy-light;
 }
 
+.vka-admin-page {
+  @apply max-w-5xl mx-auto space-y-4;
+}
+
+.vka-admin-card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4;
+}
+
+.vka-admin-flash {
+  @apply mb-3 p-3 rounded-lg text-sm border;
+}
+
+.vka-admin-flash--success {
+  @apply bg-emerald-50 text-emerald-900 border-emerald-100;
+}
+
+.vka-admin-flash--error {
+  @apply bg-red-50 text-red-900 border-red-100;
+}
+
+.vka-admin-table-wrap {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto;
+}
+
 @media print {
   .no-print {
     display: none !important;

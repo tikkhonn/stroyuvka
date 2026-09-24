@@ -86,7 +86,7 @@ def _styles() -> tuple[Border, Font, Font, Alignment, Alignment]:
 
 
 def _is_officer(entry: ChessboardSickEntry) -> bool:
-    return (entry.unit_name or "").startswith("Офицеры") or entry.location_name == "Офицеры"
+    return entry.is_faculty_level_roster
 
 
 def _podr(entry: ChessboardSickEntry) -> str:

@@ -186,6 +186,12 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
     )
     await session.execute(
         text(
+            "ALTER TABLE units "
+            "ADD COLUMN IF NOT EXISTS composition VARCHAR(32)"
+        )
+    )
+    await session.execute(
+        text(
             "CREATE TABLE IF NOT EXISTS hospitals ("
             "id SERIAL PRIMARY KEY, "
             "name VARCHAR(255) NOT NULL, "
@@ -592,12 +598,14 @@ async def compute_faculty_aggregate(
     session: AsyncSession, faculty_unit_id: int, report_date: date
 ) -> AttendanceAggregate:
     from app.services.org import get_courses_for_faculty
+    from app.services.unit_ids import is_named_unit_id
 
     courses = await get_courses_for_faculty(session, faculty_unit_id)
     parts = [
         await compute_aggregate_for_unit(session, c.id, report_date) for c in courses
     ]
-    parts.append(await compute_aggregate_for_unit(session, faculty_unit_id, report_date))
+    if not is_named_unit_id(faculty_unit_id):
+        parts.append(await compute_aggregate_for_unit(session, faculty_unit_id, report_date))
     return sum_aggregates(parts)
 
 
@@ -614,7 +622,11 @@ async def compute_academy_aggregate(
     fac_result = await session.execute(
         select(Unit).where(Unit.type == UnitType.FACULTY, Unit.is_active.is_(True))
     )
+    from app.services.unit_ids import is_named_unit_id
+
     for fac in fac_result.scalars().all():
+        if is_named_unit_id(fac.id):
+            continue
         parts.append(await compute_aggregate_for_unit(session, fac.id, report_date))
     return sum_aggregates(parts)
 

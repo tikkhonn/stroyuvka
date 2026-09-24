@@ -209,6 +209,17 @@ def person_to_read(person: Person) -> PersonRead:
 
 
 def composition_for_unit(unit: Unit) -> Composition:
+    if unit.composition is not None:
+        return unit.composition
+    if unit.type == UnitType.COURSE:
+        from app.services.unit_ids import is_named_unit_id, parse_course_id
+
+        try:
+            faculty_number, _ = parse_course_id(unit.id)
+            if is_named_unit_id(faculty_number):
+                return Composition.PERMANENT
+        except ValueError:
+            pass
     if unit.type == UnitType.FACULTY:
         return Composition.PERMANENT
     return Composition.VARIABLE

@@ -13,7 +13,7 @@ from app.services.attendance import compute_aggregate_for_unit, get_attendance_s
 from app.services.duty_contacts import get_duty_contact_on_date
 from app.services.org import get_courses_for_faculty, get_courses_for_location
 from app.services.people import department_display_name, format_rank, normalize_department_code
-from app.services.unit_ids import LOCATION_ACADEMY
+from app.services.unit_ids import LOCATION_ACADEMY, is_named_unit_id
 
 ACADEMY_TITLE = "Военно-космической академии имени А.Ф. Можайского"
 
@@ -291,7 +291,9 @@ async def _summary_rows_for_units(
         agg = await compute_aggregate_for_unit(session, unit.id, report_date)
         rows.append((unit.name, agg))
     if include_officers:
-        officers_name = f"Офицеры ({include_officers.name})"
+        from app.services.unit_labels import print_roster_block_name
+
+        officers_name = print_roster_block_name(include_officers)
         agg = await compute_aggregate_for_unit(session, include_officers.id, report_date)
         rows.append((officers_name, agg))
     return rows
@@ -671,12 +673,26 @@ async def build_stroevka_print(
             subtitle = _subtitle_for_department(dept.name, unit, report_date)
             return _build_html(subtitle, summary_rows, absences, duty_footer=dpf_footer)
 
+        if is_named_unit_id(unit_id):
+            courses = await get_courses_for_faculty(session, unit_id)
+            summary_rows = await _summary_rows_for_units(session, courses, report_date)
+            unit_ids = [c.id for c in courses]
+            absences = await _absences_for_units(session, unit_ids, report_date)
+            return _build_html(
+                _subtitle_for_unit(unit, report_date),
+                summary_rows,
+                absences,
+                duty_footer=dpf_footer,
+            )
+
         if composition == "variable":
             courses = await get_courses_for_faculty(session, unit_id)
             summary_rows = await _summary_rows_for_units(session, courses, report_date)
             unit_ids = [c.id for c in courses]
         elif composition == "permanent":
-            officers_name = f"Офицеры ({unit.name})"
+            from app.services.unit_labels import print_roster_block_name
+
+            officers_name = print_roster_block_name(unit)
             agg = await compute_aggregate_for_unit(session, unit_id, report_date)
             summary_rows = [(officers_name, agg)]
             unit_ids = [unit_id]

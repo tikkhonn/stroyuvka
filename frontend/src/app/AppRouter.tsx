@@ -74,145 +74,144 @@ function RequireRole({
   return <>{children}</>;
 }
 
+function ProtectedLayout() {
+  return (
+    <RequireAuth>
+      <Layout />
+    </RequireAuth>
+  );
+}
+
 export function AppRouter() {
   return (
-    <>
-      <Routes>
+    <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/*"
-        element={
-          <RequireAuth>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<HomeRedirect />} />
-                <Route
-                  path="/attendance"
-                  element={
-                    <ExcludeRoles roles={["dpa"]}>
-                      <AttendancePage />
-                    </ExcludeRoles>
-                  }
-                />
-                <Route
-                  path="/stroevka"
-                  element={
-                    <RequireRole roles={["dpa", "dpf"]}>
-                      <StroevkaReviewPage />
-                    </RequireRole>
-                  }
-                />
-                <Route
-                  path="/chessboard"
-                  element={
-                    <RequireRole roles={["dpa"]}>
-                      <ChessboardPage />
-                    </RequireRole>
-                  }
-                />
-                <Route
-                  path="/chat"
-                  element={
-                    <RequireRole roles={["dpa", "dpf", "dpk"]}>
-                      <ChatPage />
-                    </RequireRole>
-                  }
-                />
-                <Route
-                  path="/phones"
-                  element={
-                    <RequireRole roles={["dpf", "dpa", "dpk", "chief"]}>
-                      <PhonesPage />
-                    </RequireRole>
-                  }
-                />
-                <Route
-                  path="/print"
-                  element={
-                    <RequireRole roles={["dpa", "dpf", "dpk"]}>
-                      <PrintPage />
-                    </RequireRole>
-                  }
-                />
-                <Route
-                  path="/documentation"
-                  element={
-                    <RequireRole roles={["admin", "dpa", "dpf", "dpk"]}>
-                      <DocumentationPage />
-                    </RequireRole>
-                  }
-                />
-                <Route
-                  path="/shift-change"
-                  element={
-                    <RequireRole roles={["dpa", "dpf", "dpk"]}>
-                      <ShiftChangePage />
-                    </RequireRole>
-                  }
-                />
-                <Route path="/help" element={<HelpPage />} />
-                <Route
-                  path="/overview"
-                  element={
-                    <RequireShell shells={["chief"]}>
-                      <ChiefOverviewPage />
-                    </RequireShell>
-                  }
-                />
-                <Route
-                  path="/trends"
-                  element={
-                    <RequireShell shells={["chief"]}>
-                      <ChiefTrendsPage />
-                    </RequireShell>
-                  }
-                />
-                <Route
-                  path="/admin/units"
-                  element={
-                    <RequireShell shells={["admin"]}>
-                      <AdminUnitsPage />
-                    </RequireShell>
-                  }
-                />
-                <Route
-                  path="/admin/hospitals"
-                  element={
-                    <RequireShell shells={["admin"]}>
-                      <AdminHospitalsPage />
-                    </RequireShell>
-                  }
-                />
-                <Route
-                  path="/admin/landline-phones"
-                  element={
-                    <RequireShell shells={["admin"]}>
-                      <AdminLandlinePhonesPage />
-                    </RequireShell>
-                  }
-                />
-                <Route
-                  path="/admin/duty-contacts"
-                  element={
-                    <RequireShell shells={["admin"]}>
-                      <AdminDutyContactsPage />
-                    </RequireShell>
-                  }
-                />
-                <Route
-                  path="/audit"
-                  element={
-                    <RequireShell shells={["admin"]}>
-                      <AuditPage />
-                    </RequireShell>
-                  }
-                />
-              </Routes>
-            </Layout>
-          </RequireAuth>
-        }
-      />
+      <Route element={<ProtectedLayout />}>
+        <Route path="/" element={<HomeRedirect />} />
+        <Route
+          path="/attendance"
+          element={
+            <ExcludeRoles roles={["dpa"]}>
+              <AttendancePage />
+            </ExcludeRoles>
+          }
+        />
+        <Route
+          path="/stroevka"
+          element={
+            <RequireRole roles={["dpa", "dpf"]}>
+              <StroevkaReviewPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/chessboard"
+          element={
+            <RequireRole roles={["dpa"]}>
+              <ChessboardPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <RequireRole roles={["dpa", "dpf", "dpk"]}>
+              <ChatPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/phones"
+          element={
+            <RequireRole roles={["dpf", "dpa", "dpk", "chief"]}>
+              <PhonesPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/print"
+          element={
+            <RequireRole roles={["dpa", "dpf", "dpk"]}>
+              <PrintPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/documentation"
+          element={
+            <RequireRole roles={["admin", "dpa", "dpf", "dpk"]}>
+              <DocumentationPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/shift-change"
+          element={
+            <RequireRole roles={["dpa", "dpf", "dpk"]}>
+              <ShiftChangePage />
+            </RequireRole>
+          }
+        />
+        <Route path="/help" element={<HelpPage />} />
+        <Route
+          path="/overview"
+          element={
+            <RequireShell shells={["chief"]}>
+              <ChiefOverviewPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/trends"
+          element={
+            <RequireShell shells={["chief"]}>
+              <ChiefTrendsPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/admin/units"
+          element={
+            <RequireShell shells={["admin"]}>
+              <AdminUnitsPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/admin/hospitals"
+          element={
+            <RequireShell shells={["admin"]}>
+              <AdminHospitalsPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/admin/landline-phones"
+          element={
+            <RequireShell shells={["admin"]}>
+              <AdminLandlinePhonesPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/admin/duty-contacts"
+          element={
+            <RequireShell shells={["admin"]}>
+              <AdminDutyContactsPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/audit"
+          element={
+            <RequireShell shells={["admin"]}>
+              <AuditPage />
+            </RequireShell>
+          }
+        />
+        <Route path="*" element={<HomeRedirect />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
-    </>
   );
 }

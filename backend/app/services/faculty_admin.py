@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import DutyPostType, UnitType
+from app.core.enums import Composition, DutyPostType, UnitType
 from app.models import DutyPost, Unit
 from app.services.duty_auth import (
     default_duty_password,
@@ -13,10 +13,12 @@ from app.services.unit_ids import (
     COURSES_PER_FACULTY,
     DEFAULT_COURSE_LOCATION_ID,
     MAX_COURSE_YEAR,
+    allocate_named_unit_id,
     course_display_name,
     course_id,
     department_id,
     faculty_id,
+    is_named_unit_id,
     parse_course_id,
 )
 
@@ -145,8 +147,140 @@ async def create_faculty(
     return faculty
 
 
+async def create_named_unit(session: AsyncSession, name: str) -> Unit:
+    trimmed = name.strip()
+    if not trimmed:
+        raise ValueError("Укажите название подразделения")
+
+    uid = await allocate_named_unit_id(session)
+    unit = Unit(
+        id=uid,
+        parent_id=None,
+        type=UnitType.FACULTY,
+        name=trimmed,
+        composition=Composition.PERMANENT,
+    )
+    session.add(unit)
+    await session.flush()
+
+    session.add(
+        DutyPost(
+            unit_id=uid,
+            post_type=DutyPostType.DPF,
+            name=f"ДПФ — {trimmed}",
+            login_name=duty_login_name(DutyPostType.DPF, uid),
+            key_hash=hash_duty_password(default_duty_password(DutyPostType.DPF, uid)),
+            credentials_version=1,
+        )
+    )
+    await session.flush()
+    return unit
+
+
+async def create_officer_group(
+    session: AsyncSession,
+    faculty_unit_id: int,
+    name: str,
+) -> Unit:
+    from app.services.unit_org import allocate_officer_group_id, is_named_officer_org
+
+    trimmed = name.strip()
+    if not trimmed:
+        raise ValueError("Укажите название группы")
+
+    parent = await session.get(Unit, faculty_unit_id)
+    if not is_named_officer_org(parent):
+        raise ValueError("Группы можно добавлять только в именованное подразделение офицеров")
+
+    gid = await allocate_officer_group_id(session, faculty_unit_id)
+    existing = await session.get(Unit, gid)
+    if existing:
+        existing.parent_id = None
+        existing.type = UnitType.COURSE
+        existing.name = trimmed
+        existing.is_active = True
+        group = existing
+    else:
+        group = Unit(
+            id=gid,
+            parent_id=None,
+            type=UnitType.COURSE,
+            name=trimmed,
+        )
+        session.add(group)
+    await session.flush()
+
+    dpk = await session.execute(
+        select(DutyPost).where(
+            DutyPost.unit_id == gid,
+            DutyPost.post_type == DutyPostType.DPK,
+        )
+    )
+    dpk_post = dpk.scalar_one_or_none()
+    if not dpk_post:
+        session.add(
+            DutyPost(
+                unit_id=gid,
+                post_type=DutyPostType.DPK,
+                name=f"ДПК — {trimmed}",
+                login_name=duty_login_name(DutyPostType.DPK, gid),
+                key_hash=hash_duty_password(default_duty_password(DutyPostType.DPK, gid)),
+                credentials_version=1,
+            )
+        )
+    else:
+        dpk_post.is_active = True
+        dpk_post.name = f"ДПК — {trimmed}"
+        if not dpk_post.login_name:
+            dpk_post.login_name = duty_login_name(DutyPostType.DPK, gid)
+
+    await session.flush()
+    return group
+
+
+async def delete_officer_group(session: AsyncSession, group_unit_id: int) -> None:
+    from app.services.unit_org import assert_officer_group
+
+    await assert_officer_group(session, group_unit_id)
+    group = await session.get(Unit, group_unit_id)
+    assert group is not None
+    group.is_active = False
+    posts = await session.execute(
+        select(DutyPost).where(DutyPost.unit_id == group_unit_id)
+    )
+    for post in posts.scalars().all():
+        post.is_active = False
+    await session.flush()
+
+
+async def delete_named_unit(session: AsyncSession, unit_id: int) -> None:
+    if not is_named_unit_id(unit_id):
+        raise ValueError("Подразделение не является именованным")
+    unit = await session.get(Unit, unit_id)
+    if not unit or not unit.is_active or unit.type != UnitType.FACULTY:
+        raise ValueError("Подразделение не найдено")
+
+    ids_to_deactivate = {unit_id}
+    for course in await get_courses_for_faculty(session, unit_id):
+        ids_to_deactivate.add(course.id)
+
+    for uid in ids_to_deactivate:
+        u = await session.get(Unit, uid)
+        if u:
+            u.is_active = False
+
+    posts = await session.execute(
+        select(DutyPost).where(DutyPost.unit_id.in_(ids_to_deactivate))
+    )
+    for post in posts.scalars().all():
+        post.is_active = False
+    await session.flush()
+
+
 async def delete_faculty(session: AsyncSession, faculty_number: int) -> None:
     fid = faculty_id(faculty_number)
+    if is_named_unit_id(fid):
+        raise ValueError("Используйте удаление именованного подразделения")
     faculty = await session.get(Unit, fid)
     if not faculty or not faculty.is_active:
         raise ValueError(f"Факультет №{faculty_number} не найден")
@@ -343,6 +477,8 @@ async def reset_osh_structure(
         )
     )
     for unit in (await session.execute(org_types)).scalars().all():
+        if is_named_unit_id(unit.id):
+            continue
         unit.is_active = False
 
     await session.flush()

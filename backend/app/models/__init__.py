@@ -25,6 +25,7 @@ class Unit(Base):
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
     type: Mapped[UnitType] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(255))
+    composition: Mapped[Composition | None] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
 
     parent: Mapped[Optional["Unit"]] = relationship(

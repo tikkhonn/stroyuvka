@@ -29,18 +29,14 @@ from app.ws.manager import ws_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
-    if settings.seed_demo_data:
-        await seed_if_empty()
-    await ensure_chief_user()
     from app.db.session import async_session_factory
     from app.services.attendance import ensure_schema_patches
     from app.services.duty_auth import ensure_duty_post_schema
     from app.services.duty_contacts import ensure_duty_contact_schema
-
     from app.services.chat_attachments import ensure_chat_attachment_schema
     from app.services.people import migrate_rank_abbreviations
 
+    await init_db()
     async with async_session_factory() as session:
         await ensure_schema_patches(session)
         await ensure_duty_post_schema(session)
@@ -48,6 +44,10 @@ async def lifespan(app: FastAPI):
         await ensure_chat_attachment_schema(session)
         await migrate_rank_abbreviations(session)
         await session.commit()
+
+    if settings.seed_demo_data:
+        await seed_if_empty()
+    await ensure_chief_user()
     yield
 
 

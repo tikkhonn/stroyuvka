@@ -3,6 +3,7 @@ import { DutyContact, DutyPost, UnitRead, api } from "../api/client";
 import { onWsEvent } from "../api/ws";
 import { todayLocal } from "../utils/date";
 import { formatRank } from "../constants/ranks";
+import { AdminFlash, AdminPageShell } from "../components/AdminPageShell";
 
 const POST_GROUPS: { type: string; label: string }[] = [
   { type: "dpa", label: "ДПА — дежурный по академии" },
@@ -36,7 +37,7 @@ function DutyGroup({
   const registered = rows.filter((r) => r.contact).length;
 
   return (
-    <div className="border border-gray-200 rounded-lg mb-3 overflow-hidden bg-white shadow-sm">
+    <div className="vka-admin-card !p-0 mb-3 overflow-hidden">
       <button
         type="button"
         className="w-full flex flex-wrap items-center gap-3 px-4 py-3 text-left bg-vka-navy/5 hover:bg-vka-navy/10 transition"
@@ -245,23 +246,17 @@ export function AdminDutyContactsPage() {
   const postsTotal = posts.length;
 
   return (
-    <div>
-      <h2 className="text-xl font-serif font-bold text-vka-navy mb-2">Дежурные</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        Данные со стартовых форм ДПА, ДПФ и ДПК на сегодня ({reportDate}). Можно задать новый
-        пароль поста или сбросить регистрацию, если дежурный ошибся в форме или не может войти.
-      </p>
-
-      {message && <p className="text-sm text-green-700 mb-2">{message}</p>}
-      {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+    <AdminPageShell title="Дежурные">
+      <AdminFlash message={message} error={error} />
 
       {loading ? (
-        <p>Загрузка...</p>
+        <p className="text-sm text-gray-500">Загрузка…</p>
       ) : (
         <>
-          <p className="text-sm text-gray-600 mb-4">
-            Зарегистрировано: <strong>{registeredTotal}</strong> из{" "}
-            <strong>{postsTotal}</strong> постов
+          <p className="text-sm text-gray-600 vka-admin-card !py-3">
+            Сегодня ({reportDate}): зарегистрировано{" "}
+            <strong className="text-vka-navy">{registeredTotal}</strong> из{" "}
+            <strong className="text-vka-navy">{postsTotal}</strong> постов
           </p>
           {groups.map(({ type, label, rows }) =>
             rows.length === 0 ? null : (
@@ -278,12 +273,12 @@ export function AdminDutyContactsPage() {
             )
           )}
           {posts.length === 0 && (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-sm text-gray-500">
+            <div className="vka-admin-card py-10 text-center text-sm text-gray-500">
               Посты наряда не настроены
             </div>
           )}
         </>
       )}
-    </div>
+    </AdminPageShell>
   );
 }
