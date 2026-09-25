@@ -19,6 +19,7 @@ docker compose down -v && docker compose up --build
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api/health
 - Swagger: http://localhost:8000/docs
+- pgAdmin (опционально): `./scripts/pull-pgadmin.sh` затем `docker compose --profile tools up -d pgadmin` → http://localhost:5050. ERD: ПКМ по БД `asmrlsp` → **Generate ERD**. Если pull падает с `EOF`, см. [docker/pgadmin/README.md](docker/pgadmin/README.md).
 
 ## Схема ID
 

@@ -27,7 +27,7 @@ DEMO_ADMIN_PASSWORD = "admin123"
 DEMO_CHIEF_PASSWORD = "nachalnik123"
 
 CATEGORIES = [
-    (AbsenceCategoryCode.PRESENT, "Налицо", 0),
+    (AbsenceCategoryCode.PRESENT, "На лицо", 0),
     (AbsenceCategoryCode.DUTY, "Наряд", 1),
     (AbsenceCategoryCode.TRIP, "Командировка", 2),
     (AbsenceCategoryCode.LEAVE, "Отпуск", 3),

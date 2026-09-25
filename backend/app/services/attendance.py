@@ -223,6 +223,12 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
             AbsenceCategory(code=AbsenceCategoryCode.ARREST, label="Арест", sort_order=8)
         )
 
+    present_cat = await session.scalar(
+        select(AbsenceCategory).where(AbsenceCategory.code == AbsenceCategoryCode.PRESENT)
+    )
+    if present_cat and present_cat.label == "Налицо":
+        present_cat.label = "На лицо"
+
     from app.services.unit_ids import LOCATION_NAMES, course_display_name, parse_course_id
 
     for loc_id, loc_name in LOCATION_NAMES.items():

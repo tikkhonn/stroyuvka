@@ -19,7 +19,7 @@ function PercentHint({ pct }: { pct: number }) {
         role="tooltip"
         className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
       >
-        {pct}% — налицо
+        {pct}% — на лицо
       </span>
     </span>
   );

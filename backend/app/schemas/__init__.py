@@ -259,7 +259,7 @@ class AttendanceAggregate(BaseModel):
         if self.present != max(0, self.total_list - total_absent):
             raise ValueError(
                 f"Сходимость нарушена: по списку {self.total_list}, "
-                f"налицо {self.present} + отсутствующие {total_absent}"
+                f"на лицо {self.present} + отсутствующие {total_absent}"
             )
         return self
 

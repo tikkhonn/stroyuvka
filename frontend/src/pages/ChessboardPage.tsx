@@ -12,7 +12,7 @@ type PanelFilter = "all" | "sick" | number;
 
 const COLS = [
   { key: "total_list", label: "По списку" },
-  { key: "present", label: "Налицо" },
+  { key: "present", label: "На лицо" },
   { key: "duty", label: "Наряд" },
   { key: "trip", label: "Команд." },
   { key: "leave", label: "Отпуск" },
@@ -446,7 +446,7 @@ export function ChessboardPage() {
                       <div className="font-semibold text-base">{section.locationName}</div>
                       <div className={`text-xs mt-1 ${active ? "text-white/90" : "text-gray-500"}`}>
                         {countCourses(section.dataRows)} курс.
-                        {total ? ` · налицо ${total.present} / ${total.total_list}` : ""}
+                        {total ? ` · на лицо ${total.present} / ${total.total_list}` : ""}
                       </div>
                     </button>
                   );

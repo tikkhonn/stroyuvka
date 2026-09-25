@@ -144,7 +144,7 @@ function CourseCard({
           </span>
         )}
         <span className="text-sm text-gray-600 ml-auto">
-          список {course.aggregate.total_list} · налицо {course.aggregate.present}
+          список {course.aggregate.total_list} · на лицо {course.aggregate.present}
         </span>
       </button>
       {open && (
@@ -194,7 +194,7 @@ function DepartmentBlock({
           {open ? "▼" : "▶"} {dept.name}
         </span>
         <span className="text-sm text-gray-600 ml-auto">
-          список {dept.aggregate.total_list} · налицо {dept.aggregate.present}
+          список {dept.aggregate.total_list} · на лицо {dept.aggregate.present}
         </span>
       </button>
       {open && (
@@ -241,7 +241,7 @@ function OfficersCard({
           officers.report_status && <StatusBadge status={officers.report_status} />
         )}
         <span className="text-sm text-gray-600 ml-auto">
-          список {officers.aggregate.total_list} · налицо {officers.aggregate.present}
+          список {officers.aggregate.total_list} · на лицо {officers.aggregate.present}
         </span>
       </button>
       {open && (
@@ -455,7 +455,7 @@ function AggregatedCoursesCard({
           {open ? "▼" : "▶"} {title}
         </span>
         <span className="text-sm text-gray-600 ml-auto">
-          список {aggregate.total_list} · налицо {aggregate.present}
+          список {aggregate.total_list} · на лицо {aggregate.present}
         </span>
       </button>
       {open && (

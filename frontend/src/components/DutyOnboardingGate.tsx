@@ -12,6 +12,12 @@ import { useNavigate } from "react-router-dom";
 import { DutyContact, api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { RANK_SUGGESTIONS } from "../constants/ranks";
+import {
+  filterDutyFullNameInput,
+  filterDutyPhoneDigits,
+  validateDutyFullName,
+  validateDutyPhoneDigits,
+} from "../utils/dutyContactInput";
 
 interface DutyOnboardingContextValue {
   isDuty: boolean;
@@ -86,6 +92,16 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    const nameErr = validateDutyFullName(fullName);
+    if (nameErr) {
+      setError(nameErr);
+      return;
+    }
+    const phoneErr = validateDutyPhoneDigits(phone);
+    if (phoneErr) {
+      setError(phoneErr);
+      return;
+    }
     setSubmitting(true);
     try {
       await api<DutyContact>("/api/duty-contacts/self", {
@@ -93,7 +109,7 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           rank: rank.trim(),
           full_name: fullName.trim(),
-          phone: phone.trim(),
+          phone,
         }),
       });
       setRegistered(true);
@@ -149,11 +165,13 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
                 </datalist>
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">ФИО</label>
+                <label className="block text-xs text-gray-600 mb-1">Фамилия и инициалы</label>
                 <input
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => setFullName(filterDutyFullNameInput(e.target.value))}
                   className="w-full border rounded px-3 py-2 text-sm"
+                  placeholder="Иванов И.И."
+                  autoComplete="name"
                   required
                 />
               </div>
@@ -161,11 +179,15 @@ export function DutyOnboardingProvider({ children }: { children: ReactNode }) {
                 <label className="block text-xs text-gray-600 mb-1">Телефон</label>
                 <input
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  placeholder="8 (812) ..."
+                  onChange={(e) => setPhone(filterDutyPhoneDigits(e.target.value))}
+                  className="w-full border rounded px-3 py-2 text-sm font-mono tracking-wide"
+                  placeholder="9123456789"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  maxLength={11}
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">Только цифры, 10–11 знаков</p>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button

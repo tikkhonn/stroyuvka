@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Stroyuvka (Docker)",
+      "Group": "Development",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "asmrlsp",
+      "Username": "asmrlsp",
+      "PassFile": "/pgpass",
+      "SSLMode": "prefer"
+    }
+  }
+}

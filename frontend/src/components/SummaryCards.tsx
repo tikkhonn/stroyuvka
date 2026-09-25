@@ -19,7 +19,7 @@ const NEUTRAL_CLASS = AGGREGATE_NEUTRAL_TEXT_CLASS;
 
 const ITEMS: { key: SummaryCardKey; label: string }[] = [
   { key: "total_list", label: "По списку" },
-  { key: "present", label: "Налицо" },
+  { key: "present", label: "На лицо" },
   { key: "duty", label: "Наряд" },
   { key: "trip", label: "Командировка" },
   { key: "leave", label: "Отпуск" },

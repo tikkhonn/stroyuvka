@@ -591,7 +591,7 @@ export function AttendancePage() {
                           colSpan={editable && absencesEditing ? 7 : 4}
                           className="text-gray-500 text-sm"
                         >
-                          Нет отсутствующих — все налицо
+                          Нет отсутствующих — все на лицо
                         </td>
                       </tr>
                     ) : (

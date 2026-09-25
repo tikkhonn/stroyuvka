@@ -98,7 +98,7 @@ function normalizeAbsenceCategoryCode(code: string): AbsenceCategoryKey {
   return "other";
 }
 
-/** Neutral styling for «По списку» / «Налицо» — not absence reasons. */
+/** Neutral styling for «По списку» / «На лицо» — not absence reasons. */
 export const AGGREGATE_NEUTRAL_TEXT_CLASS = "text-gray-900";
 
 /** Tailwind text color per absence reason (numbers + names). */

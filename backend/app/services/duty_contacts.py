@@ -7,6 +7,7 @@ from app.core.enums import AuthKind, DutyPostType
 from app.models import DutyContact, DutyPost, Unit
 from app.schemas import AuthUser, DutyContactRead, DutySelfRegister
 from app.services.org import get_courses_for_faculty
+from app.services.duty_contact_validation import validate_duty_full_name, validate_duty_phone
 from app.services.people import format_rank, validate_rank
 
 
@@ -100,10 +101,8 @@ async def register_self_contact(
         raise ValueError("Нет привязки к подразделению")
 
     rank = validate_rank(body.rank.strip())
-    full_name = body.full_name.strip()
-    phone = body.phone.strip()
-    if not full_name or not phone:
-        raise ValueError("Заполните воинское звание, ФИО и телефон")
+    full_name = validate_duty_full_name(body.full_name)
+    phone = validate_duty_phone(body.phone)
 
     post = await session.get(DutyPost, user.duty_post_id)
     existing = await get_self_contact_today(session, user, contact_date)
