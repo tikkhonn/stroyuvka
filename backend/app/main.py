@@ -20,7 +20,7 @@ from app.api.routers import (
 from app.core.config import settings
 from app.core.enums import AuthKind
 from app.core.security import decode_access_token
-from app.db.session import init_db
+from app.db.session import check_db_connection, init_db
 from app.schemas import AuthUser
 from app.seed.run import ensure_chief_user, seed_if_empty
 from app.services.chat_access import ws_rooms_for_duty_user
@@ -82,7 +82,21 @@ app.include_router(users.router, prefix="/api")
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "puls"}
+    try:
+        await check_db_connection()
+    except Exception as exc:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "degraded",
+                "service": "puls",
+                "database": "unavailable",
+                "detail": str(exc),
+            },
+        )
+    return {"status": "ok", "service": "puls", "database": "ok"}
 
 
 def _rooms_for_token(payload: dict) -> list[str]:

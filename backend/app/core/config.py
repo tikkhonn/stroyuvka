@@ -2,8 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
+    # In Docker Compose DATABASE_URL is injected with host "postgres".
+    # Default localhost is for local dev without containers.
     database_url: str = "postgresql+asyncpg://asmrlsp:asmrlsp_dev@localhost:5432/asmrlsp"
     secret_key: str = "dev-secret-key-change-in-production"
     access_token_expire_minutes: int = 480

@@ -20,6 +20,14 @@ export interface FaqItem {
   roles?: string[];
 }
 
+export interface HelpGuideChapter {
+  id: string;
+  title: string;
+  paragraphs: string[];
+  bullets?: string[];
+  tips?: string[];
+}
+
 export interface HelpContent {
   roleLabel: string;
   about: HelpSection[];
@@ -28,4 +36,5 @@ export interface HelpContent {
   glossary: GlossaryItem[];
   faq: FaqItem[];
   adminNote?: string;
+  detailedGuide?: HelpGuideChapter[];
 }

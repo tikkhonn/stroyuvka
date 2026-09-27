@@ -4,6 +4,7 @@ import { DPF_STEPS } from "./dpf";
 import { DPA_STEPS } from "./dpa";
 import { FAQ } from "./faq";
 import { GLOSSARY } from "./glossary";
+import { getDetailedHelpGuide } from "./guide";
 import type { FaqItem, HelpContent } from "./types";
 
 function faqForRole(role: string): FaqItem[] {
@@ -34,6 +35,7 @@ export function getHelpContent(role: string, shell: string): HelpContent {
         steps: DPK_STEPS,
         glossary: GLOSSARY,
         faq: faqForRole("dpk"),
+        detailedGuide: getDetailedHelpGuide("dpk"),
       };
     case "dpf":
       return {
@@ -43,6 +45,7 @@ export function getHelpContent(role: string, shell: string): HelpContent {
         steps: DPF_STEPS,
         glossary: GLOSSARY,
         faq: faqForRole("dpf"),
+        detailedGuide: getDetailedHelpGuide("dpf"),
       };
     case "dpa":
       return {
@@ -52,6 +55,7 @@ export function getHelpContent(role: string, shell: string): HelpContent {
         steps: DPA_STEPS,
         glossary: GLOSSARY,
         faq: faqForRole("dpa"),
+        detailedGuide: getDetailedHelpGuide("dpa"),
       };
     default:
       return {

@@ -33,6 +33,10 @@ from app.services.chat_attachments import (
     ws_message_payload,
 )
 from app.services.chat_clear import clear_chats_on_shift_change
+from app.services.attendance import (
+    broadcast_attendance_changed,
+    clear_duty_absences_on_shift_change,
+)
 from app.services.duty_contacts import (
     ensure_duty_contact_schema,
     get_self_contact_today,
@@ -219,6 +223,9 @@ async def shift_change_route(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     if changed:
+        affected_units = await clear_duty_absences_on_shift_change(
+            session, user, contact_date
+        )
         await log_action(
             session,
             user.auth_kind,
@@ -228,6 +235,8 @@ async def shift_change_route(
             "duty_post",
             user.duty_post_id,
         )
+        for unit_id in affected_units:
+            await broadcast_attendance_changed(session, unit_id, contact_date)
         cleared_scopes, notify_rooms = await clear_chats_on_shift_change(session, user)
         if cleared_scopes:
             await ws_manager.broadcast_event(

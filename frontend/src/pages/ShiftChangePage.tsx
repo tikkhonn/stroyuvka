@@ -5,6 +5,16 @@ import { DutyContactEditModal } from "../components/DutyContactEditModal";
 import { useDutyOnboarding } from "../components/DutyOnboardingGate";
 import { formatRank } from "../constants/ranks";
 
+function dutyClearScopeText(role: string | undefined): string {
+  if (role === "dpf") {
+    return "С офицеров факультета и всех курсов снимутся отметки «Наряд» за сегодня — независимо от вида наряда.";
+  }
+  if (role === "dpa") {
+    return "Со всех подразделений снимутся отметки «Наряд» за сегодня — независимо от вида наряда.";
+  }
+  return "С вашего курса снимутся отметки «Наряд» за сегодня — независимо от вида наряда.";
+}
+
 export function ShiftChangePage() {
   const { session } = useAuth();
   const { startShiftChange } = useDutyOnboarding();
@@ -53,6 +63,7 @@ export function ShiftChangePage() {
     contact?.rank && contact?.full_name
       ? `${formatRank(contact.rank)} ${contact.full_name}`
       : contact?.post_name;
+  const dutyClearScope = dutyClearScopeText(session?.role);
 
   return (
     <div className="max-w-2xl">
@@ -97,8 +108,8 @@ export function ShiftChangePage() {
                 телефон. Без этого работа в системе недоступна.
               </li>
               <li>
-                <strong>Расход за сегодня сохранится</strong> — цифры и строевые записки можно продолжать
-                править.
+                <strong>Расход за сегодня сохранится</strong> — болезнь, отпуск и другие причины
+                останутся. {dutyClearScope}
               </li>
               <li>
                 Следующий дежурный входит под <strong>тем же логином и паролем</strong> поста.
@@ -121,7 +132,7 @@ export function ShiftChangePage() {
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-sm text-red-900 mb-4">
                 Подтвердите смену наряда: откроется форма для нового дежурного. Расход за день
-                сохранится.
+                сохранится, но отметки «Наряд» за сегодня будут сняты.
               </p>
               <div className="flex flex-wrap gap-3">
                 <button

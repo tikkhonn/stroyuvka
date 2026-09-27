@@ -8,6 +8,7 @@ from app.core.enums import (
     ABSENCE_CATEGORY_DEFS,
     DETAIL_REQUIRED_CODES,
     AbsenceCategoryCode,
+    AuthKind,
     DutyPostType,
     ReportStatus,
     UnitType,
@@ -29,6 +30,7 @@ from app.schemas import (
     AbsencePersonItem,
     AttendanceAggregate,
     AttendanceSnapshot,
+    AuthUser,
     DepartmentStroevkaSummary,
     PersonAttendanceRow,
 )
@@ -803,3 +805,59 @@ async def _get_faculty_report(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def clear_duty_absences_on_shift_change(
+    session: AsyncSession,
+    user: AuthUser,
+    report_date: date,
+) -> list[int]:
+    """Remove visible duty absences on shift handover. Returns affected unit ids."""
+    if user.auth_kind != AuthKind.DUTY_POST.value or not user.post_type:
+        return []
+
+    query = select(AbsenceEntry).where(
+        AbsenceEntry.category_code == AbsenceCategoryCode.DUTY,
+    )
+    if user.post_type == DutyPostType.DPK.value:
+        if user.unit_id is None:
+            return []
+        query = query.where(AbsenceEntry.unit_id == user.unit_id)
+    elif user.post_type == DutyPostType.DPF.value:
+        if user.unit_id is None:
+            return []
+        from app.services.org import get_courses_for_faculty
+
+        courses = await get_courses_for_faculty(session, user.unit_id)
+        unit_ids = [user.unit_id, *(course.id for course in courses)]
+        query = query.where(AbsenceEntry.unit_id.in_(unit_ids))
+    elif user.post_type == DutyPostType.DPA.value:
+        pass
+    else:
+        return []
+
+    result = await session.execute(query)
+    affected_units: set[int] = set()
+    for entry in result.scalars().all():
+        if not _entry_visible_on_date(entry, report_date):
+            continue
+        affected_units.add(entry.unit_id)
+        await session.delete(entry)
+    await session.flush()
+    return sorted(affected_units)
+
+
+async def broadcast_attendance_changed(
+    session: AsyncSession,
+    unit_id: int,
+    report_date: date,
+) -> None:
+    from app.services.reports import get_faculty_id_for_course
+    from app.ws.manager import ws_manager
+
+    faculty_id = await get_faculty_id_for_course(session, unit_id)
+    rooms = ["dpa"]
+    if faculty_id:
+        rooms.append(f"faculty_{faculty_id}")
+    payload = {"unit_id": unit_id, "report_date": str(report_date)}
+    await ws_manager.broadcast_event(rooms, "ATTENDANCE_CHANGED", payload)

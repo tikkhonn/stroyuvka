@@ -1,12 +1,15 @@
 services:
   postgres:
     image: postgres:16-alpine
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-asmrlsp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asmrlsp_dev}
       POSTGRES_DB: ${POSTGRES_DB:-asmrlsp}
     ports:
-      - "5432:5432"
+      # On servers with a local PostgreSQL on 5432, set POSTGRES_HOST_PORT=5433 in .env
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,9 +20,12 @@ services:
 
   backend:
     build: ./backend
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     environment:
+      # Host must be the Compose service name "postgres", not localhost.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-asmrlsp}:${POSTGRES_PASSWORD:-asmrlsp_dev}@postgres:5432/${POSTGRES_DB:-asmrlsp}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
@@ -57,25 +63,6 @@ services:
     profiles:
       - prod
 
-  pgadmin:
-    profiles:
-      - tools
-    image: dpage/pgadmin4:8.14.0
-    pull_policy: missing
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@local.dev}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-asmrlsp_dev}
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
-      - ./docker/pgadmin/pgpass:/pgpass:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
 
 volumes:
   pgdata:

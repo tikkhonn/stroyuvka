@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getHelpContent } from "../content/help";
 import { HelpTimeline } from "../components/HelpTimeline";
+import { HelpGuideModal } from "../components/HelpGuideModal";
 
 export function HelpPage() {
   const { session } = useAuth();
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const content = useMemo(() => {
     if (!session) return null;
@@ -97,6 +99,27 @@ export function HelpPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {content.detailedGuide && content.detailedGuide.length > 0 && (
+        <div className="pt-2 pb-4">
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className="bg-vka-navy text-white px-5 py-2.5 rounded font-medium hover:bg-vka-navy-light transition"
+          >
+            Подробнее
+          </button>
+        </div>
+      )}
+
+      {content.detailedGuide && content.detailedGuide.length > 0 && (
+        <HelpGuideModal
+          open={guideOpen}
+          title={`Подробная инструкция — ${content.roleLabel}`}
+          chapters={content.detailedGuide}
+          onClose={() => setGuideOpen(false)}
+        />
       )}
     </div>
   );

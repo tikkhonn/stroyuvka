@@ -137,7 +137,7 @@ async def shift_change_self_contact(
     user: AuthUser,
     contact_date: date,
 ) -> bool:
-    """Смена наряда: удалить карточку дежурного, строевка за день не трогается."""
+    """Смена наряда: удалить карточку дежурного. Статус строевой не сбрасывается."""
     if user.auth_kind != AuthKind.DUTY_POST.value or not user.duty_post_id:
         raise ValueError("Только для постов наряда")
     contact = await get_self_contact_today(session, user, contact_date)
