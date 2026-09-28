@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -11,9 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import AuthKind
-from app.models import LandlinePhone
+from app.models import LandlinePhone, Unit
 from app.schemas import AuthUser, LandlinePhoneCreate, LandlinePhoneUpdate
 from app.services.unit_ids import parse_course_id
+
+logger = logging.getLogger(__name__)
 
 LEGACY_DATA_FILE = Path(__file__).resolve().parents[2] / "data" / "landline_phones.json"
 _FACULTY_BUILDING_RE = re.compile(
@@ -50,6 +53,17 @@ def _infer_duty_scope(name: str) -> tuple[str | None, int | None]:
     return None, None
 
 
+def _linked_faculty_id(faculty_id: int | None, unit_ids: set[int]) -> int | None:
+    if faculty_id is not None and faculty_id in unit_ids:
+        return faculty_id
+    return None
+
+
+async def _existing_unit_ids(session: AsyncSession) -> set[int]:
+    result = await session.scalars(select(Unit.id))
+    return set(result.all())
+
+
 def _resolve_dpa_phone(rows: list[LandlinePhone]) -> str | None:
     dpa_phone: str | None = None
     for row in rows:
@@ -75,7 +89,12 @@ def _resolve_faculty_scoped_phone(
             continue
         if row.duty_scope == duty_scope and row.faculty_id == faculty_id:
             return row.phone
-        if row.duty_scope is None and phone is None and name_pattern:
+        if (
+            phone is None
+            and name_pattern
+            and row.faculty_id is None
+            and row.duty_scope in (None, duty_scope)
+        ):
             match = name_pattern.search(row.name)
             if match and int(match.group(1)) == faculty_id:
                 phone = row.phone
@@ -112,6 +131,8 @@ async def ensure_landline_phones_table(session: AsyncSession) -> None:
         )
     )
 
+    unit_ids = await _existing_unit_ids(session)
+
     existing = await session.scalar(select(LandlinePhone.id).limit(1))
     if existing is None and LEGACY_DATA_FILE.is_file():
         raw = json.loads(LEGACY_DATA_FILE.read_text(encoding="utf-8"))
@@ -123,6 +144,13 @@ async def ensure_landline_phones_table(session: AsyncSession) -> None:
                 if not name:
                     continue
                 duty_scope, faculty_id = _infer_duty_scope(name)
+                linked_faculty_id = _linked_faculty_id(faculty_id, unit_ids)
+                if faculty_id is not None and linked_faculty_id is None:
+                    logger.info(
+                        "Landline %r references missing unit id=%s; saving without faculty_id",
+                        name,
+                        faculty_id,
+                    )
                 session.add(
                     LandlinePhone(
                         name=name,
@@ -130,18 +158,25 @@ async def ensure_landline_phones_table(session: AsyncSession) -> None:
                         sort_order=index,
                         is_active=True,
                         duty_scope=duty_scope,
-                        faculty_id=faculty_id,
+                        faculty_id=linked_faculty_id,
                     )
                 )
 
     rows = await list_landline_phones(session)
     for row in rows:
-        if row.duty_scope is not None:
+        inferred_scope, inferred_faculty_id = _infer_duty_scope(row.name)
+        linked_faculty_id = _linked_faculty_id(inferred_faculty_id, unit_ids)
+        if row.duty_scope is None:
+            if inferred_scope:
+                row.duty_scope = inferred_scope
+                row.faculty_id = linked_faculty_id
             continue
-        duty_scope, faculty_id = _infer_duty_scope(row.name)
-        if duty_scope:
-            row.duty_scope = duty_scope
-            row.faculty_id = faculty_id
+        if (
+            row.faculty_id is None
+            and linked_faculty_id is not None
+            and row.duty_scope in _FACULTY_SCOPED_ROLES
+        ):
+            row.faculty_id = linked_faculty_id
 
 
 async def duty_landlines_for_course(
