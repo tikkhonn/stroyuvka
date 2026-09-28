@@ -61,8 +61,15 @@ async def seed_if_empty() -> None:
 
         cat_map: dict[AbsenceCategoryCode, AbsenceCategory] = {}
         for code, label, order in CATEGORIES:
-            cat = AbsenceCategory(code=code, label=label, sort_order=order)
-            session.add(cat)
+            cat = await session.scalar(
+                select(AbsenceCategory).where(AbsenceCategory.code == code)
+            )
+            if cat is None:
+                cat = AbsenceCategory(code=code, label=label, sort_order=order)
+                session.add(cat)
+            else:
+                cat.label = label
+                cat.sort_order = order
             cat_map[code] = cat
         await session.flush()
 
