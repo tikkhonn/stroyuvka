@@ -75,7 +75,7 @@ export function LoginPage() {
                   : "text-gray-600 hover:text-vka-navy"
               }`}
             >
-              Админ / офицер 
+              Админ / Офицер
             </button>
           </div>
 

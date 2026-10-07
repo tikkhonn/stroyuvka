@@ -18,6 +18,7 @@ import { RosterSection, type RosterSortState } from "../components/RosterSection
 import { RosterPersonCombobox } from "../components/RosterPersonCombobox";
 import { HospitalSelect } from "../components/HospitalSelect";
 import { onWsEvent } from "../api/ws";
+import { shouldReloadOperationalEvent } from "../utils/wsScope";
 import {
   ABSENCE_CATEGORY_OPTIONS,
   formatAbsenceReason,
@@ -133,13 +134,15 @@ export function AttendancePage() {
         ev.type === "COURSE_CHANGES_PENDING" ||
         ev.type === "REPORT_EDITING_STARTED" ||
         ev.type === "FACULTY_EDITING_STARTED"
-      )
+      ) {
+        if (!shouldReloadOperationalEvent(session, ev.payload)) return;
         void load();
+      }
     });
     return () => {
       unsub();
     };
-  }, [load]);
+  }, [load, session]);
 
   const detailRequired = Boolean(
     categories.find((c) => c.code === newCategory)?.detail_required

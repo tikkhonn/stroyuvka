@@ -16,8 +16,9 @@ import { SubmittedReportStatus } from "../components/SubmittedReportStatus";
 import { DpfFacultySubmitButton } from "../components/DpfFacultySubmitButton";
 import { DutyLandlinePlaque } from "../components/DutyLandlinePlaque";
 import { onWsEvent } from "../api/ws";
+import { shouldReloadOperationalEvent } from "../utils/wsScope";
 import { formatAbsenceName, formatRank } from "../constants/ranks";
-import { formatAbsenceCategory, formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
+import { formatAbsenceReason, absenceCategoryTextClass, absenceCategoryRowClass } from "../constants/absenceCategories";
 import { formatDateRu, todayLocal } from "../utils/date";
 import { isNamedOfficerFaculty } from "../utils/namedUnits";
 
@@ -69,25 +70,6 @@ function sumAggregates(parts: AttendanceAggregate[]): AttendanceAggregate {
     other,
     arrest,
   };
-}
-
-function AbsencesList({ rows }: { rows: AbsenceEntry[] }) {
-  if (!rows.length) return <p className="text-sm text-gray-500">Отсутствующих нет</p>;
-  return (
-    <ul className="text-sm space-y-1">
-      {rows.map((r) => {
-        const colorClass = absenceCategoryTextClass(r.category_code);
-        return (
-        <li key={r.id}>
-          <span className={`font-medium ${colorClass}`}>{formatAbsenceName(r)}</span> —{" "}
-          <span className={colorClass}>
-            {formatAbsenceCategory(r.category_code, r.status_date)}
-          </span>
-        </li>
-        );
-      })}
-    </ul>
-  );
 }
 
 function CourseCard({
@@ -150,11 +132,7 @@ function CourseCard({
       {open && (
         <div className="px-4 pb-4 border-t border-gray-100">
           <SummaryCards agg={course.aggregate} />
-          {role === "dpf" ? (
-            <CourseAbsencesTable absences={course.absences} showRank />
-          ) : (
-            <AbsencesList rows={course.absences} />
-          )}
+          <CourseAbsencesTable absences={course.absences} showRank />
           {pending && (
             <button
               type="button"
@@ -252,7 +230,7 @@ function OfficersCard({
                 <DepartmentBlock
                   key={dept.code ?? "_none"}
                   dept={dept}
-                  showRank={role === "dpf"}
+                  showRank
                 />
               ))}
               <div className="mt-4 pt-4 border-t border-gray-200">
@@ -262,7 +240,7 @@ function OfficersCard({
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
                     Отсутствующие
                   </p>
-                  <OfficersAbsencesTable officers={officers} showRank={role === "dpf"} />
+                  <OfficersAbsencesTable officers={officers} showRank />
                 </div>
               </div>
             </>
@@ -271,7 +249,7 @@ function OfficersCard({
               <SummaryCards agg={officers.aggregate} />
               <div className="mt-3">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Отсутствующие</p>
-                <OfficersAbsencesTable officers={officers} showRank={role === "dpf"} />
+                <OfficersAbsencesTable officers={officers} showRank />
               </div>
             </>
           )}
@@ -622,13 +600,15 @@ export function StroevkaReviewPage() {
         ev.type === "FACULTY_SUBMITTED" ||
         ev.type === "FACULTY_EDITING_STARTED" ||
         ev.type === "FACULTY_APPROVED"
-      )
+      ) {
+        if (!shouldReloadOperationalEvent(session, ev.payload)) return;
         load();
+      }
     });
     return () => {
       unsub();
     };
-  }, [load]);
+  }, [load, session]);
 
   const dpfBundle = role === "dpf" ? bundles[0] : undefined;
 

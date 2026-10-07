@@ -1,6 +1,8 @@
 /** Названия расположений ОШС (id 1001–1003). */
+export const LOCATION_ACADEMY = 1001;
+
 const LOCATION_NAMES: Record<number, string> = {
-  1001: "Академия",
+  [LOCATION_ACADEMY]: "Академия",
   1002: "ВГ №6 (Пушкин)",
   1003: "ВГ №61 (Лехтуси)",
 };

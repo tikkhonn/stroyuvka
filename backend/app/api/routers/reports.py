@@ -58,7 +58,13 @@ async def submit_course(
         else:
             await notify_dpk_stroevka_submitted(session, user, course_id, faculty.id)
     await ws_manager.broadcast_event(
-        rooms, "REPORT_SUBMITTED", {"course_id": course_id, "report_date": str(report_date)}
+        rooms,
+        "REPORT_SUBMITTED",
+        {
+            "course_id": course_id,
+            "report_date": str(report_date),
+            "faculty_id": faculty.id if faculty else None,
+        },
     )
     await log_action(
         session, user.auth_kind, user.duty_post_id or 0, user.display_name,
@@ -89,7 +95,11 @@ async def start_editing_course(
         await ws_manager.broadcast_event(
             [f"faculty_{faculty.id}"],
             "REPORT_EDITING_STARTED",
-            {"course_id": course_id, "report_date": str(report_date)},
+            {
+                "course_id": course_id,
+                "report_date": str(report_date),
+                "faculty_id": faculty.id,
+            },
         )
     return {"status": report.status, "is_editing": report.is_editing}
 
@@ -334,6 +344,10 @@ async def ack_dpa(
     await ws_manager.broadcast_event(
         rooms,
         "COURSE_CHANGES_ACK_DPA",
-        {"course_id": course_id, "report_date": str(report_date)},
+        {
+            "course_id": course_id,
+            "report_date": str(report_date),
+            "faculty_id": faculty.id if faculty else None,
+        },
     )
     return {"ok": True, "changes_pending_dpa": report.changes_pending_dpa}

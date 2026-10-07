@@ -5,7 +5,8 @@ import { ReportPipelineBar } from "../components/ReportPipelineBar";
 import { aggregateCellClass } from "../components/SummaryCards";
 import { formatAbsenceName } from "../constants/ranks";
 import { absenceCategoryTextClass } from "../constants/absenceCategories";
-import { KNOWN_LOCATIONS } from "../constants/locations";
+import { KNOWN_LOCATIONS, LOCATION_ACADEMY } from "../constants/locations";
+import { pluralCourses } from "../utils/plural";
 
 type View = "faculty" | "location";
 type PanelFilter = "all" | "sick" | number;
@@ -38,6 +39,10 @@ const FACULTY_BAND_CLASSES = [
 function facultyBandClass(facultyId: number): string {
   if (facultyId < 1) return "border-l-4 border-gray-400 bg-gray-50/70";
   return FACULTY_BAND_CLASSES[(facultyId - 1) % FACULTY_BAND_CLASSES.length];
+}
+
+function sickLocationLabel(locationId: number, locationName: string): string {
+  return locationId === LOCATION_ACADEMY ? "курсанты" : locationName;
 }
 
 type FacultyBlock = {
@@ -445,7 +450,7 @@ export function ChessboardPage() {
                       </div>
                       <div className="font-semibold text-base">{section.locationName}</div>
                       <div className={`text-xs mt-1 ${active ? "text-white/90" : "text-gray-500"}`}>
-                        {countCourses(section.dataRows)} курс.
+                        {pluralCourses(countCourses(section.dataRows))}
                         {total ? ` · на лицо ${total.present} / ${total.total_list}` : ""}
                       </div>
                     </button>
@@ -469,7 +474,7 @@ export function ChessboardPage() {
                 {sickSummary.by_location.some((l) => l.count > 0)
                   ? ` · ${sickSummary.by_location
                       .filter((l) => l.count > 0)
-                      .map((l) => `${l.location_name} ${l.count}`)
+                      .map((l) => `${sickLocationLabel(l.location_id, l.location_name)} ${l.count}`)
                       .join(", ")}`
                   : ""}
                 {sickSummary.officers_count > 0
@@ -512,8 +517,7 @@ export function ChessboardPage() {
                         >
                           {section.locationName}
                           <span className="ml-2 font-normal normal-case text-gray-600">
-                            ({countCourses(section.dataRows)}{" "}
-                            {countCourses(section.dataRows) === 1 ? "курс" : "курсов"})
+                            ({pluralCourses(countCourses(section.dataRows))})
                           </span>
                         </td>
                       </tr>

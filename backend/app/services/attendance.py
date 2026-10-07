@@ -859,5 +859,5 @@ async def broadcast_attendance_changed(
     rooms = ["dpa"]
     if faculty_id:
         rooms.append(f"faculty_{faculty_id}")
-    payload = {"unit_id": unit_id, "report_date": str(report_date)}
+    payload = {"unit_id": unit_id, "report_date": str(report_date), "faculty_id": faculty_id}
     await ws_manager.broadcast_event(rooms, "ATTENDANCE_CHANGED", payload)

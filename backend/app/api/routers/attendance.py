@@ -216,7 +216,7 @@ async def _notify_attendance(
     rooms = ["dpa"]
     if faculty_id:
         rooms.append(f"faculty_{faculty_id}")
-    payload = {"unit_id": unit_id, "report_date": str(report_date)}
+    payload = {"unit_id": unit_id, "report_date": str(report_date), "faculty_id": faculty_id}
     if notify_dpf and faculty_id:
         await ws_manager.broadcast_event(
             [f"faculty_{faculty_id}"],
