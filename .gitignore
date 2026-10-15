@@ -16,3 +16,4 @@ frontend/dist/
 frontend/tsconfig.tsbuildinfo
 backend/.mypy_cache/
 backend/data/chat_uploads/
+puls-images.tar

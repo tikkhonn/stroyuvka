@@ -19,6 +19,7 @@ services:
       retries: 5
 
   backend:
+    image: puls-backend:offline
     build: ./backend
     env_file:
       - .env
@@ -39,6 +40,7 @@ services:
       - chat_uploads:/app/data/chat_uploads
 
   frontend:
+    image: puls-frontend:offline
     build: ./frontend
     ports:
       - "5173:5173"
