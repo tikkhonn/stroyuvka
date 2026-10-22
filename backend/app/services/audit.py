@@ -1,13 +1,11 @@
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import MSK
 from app.models import AuditLog
 from app.schemas import LoginDayEntryRead, LoginDaySummaryRead
-
-MSK = ZoneInfo("Europe/Moscow")
 LOGIN_ACTIONS = ("login", "duty_login")
 
 

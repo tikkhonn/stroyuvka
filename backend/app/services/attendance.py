@@ -188,6 +188,12 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
     )
     await session.execute(
         text(
+            "ALTER TABLE people "
+            "ADD COLUMN IF NOT EXISTS is_adjunct BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+    )
+    await session.execute(
+        text(
             "ALTER TABLE units "
             "ADD COLUMN IF NOT EXISTS composition VARCHAR(32)"
         )

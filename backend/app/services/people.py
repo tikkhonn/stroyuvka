@@ -430,3 +430,24 @@ async def migrate_rank_abbreviations(session: AsyncSession) -> None:
                 {"new_rank": new_rank, "old_rank": old_key},
             )
     await session.flush()
+
+
+async def set_adjunct_for_people(
+    session: AsyncSession,
+    unit_id: int,
+    person_ids: list[int],
+    is_adjunct: bool,
+) -> int:
+    if not person_ids:
+        return 0
+    unique_ids = list(dict.fromkeys(person_ids))
+    result = await session.execute(
+        select(Person).where(Person.unit_id == unit_id, Person.id.in_(unique_ids))
+    )
+    people = list(result.scalars().all())
+    if len(people) != len(unique_ids):
+        raise ValueError("Не все выбранные люди найдены в этом подразделении")
+    for person in people:
+        person.is_adjunct = is_adjunct
+    await session.flush()
+    return len(people)

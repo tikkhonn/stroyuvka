@@ -9,7 +9,7 @@ import { DpfPrintModal } from "../components/DpfPrintModal";
 import { openPrintHtml } from "../utils/stroevayaPrint";
 
 type Scope = "academy" | "location" | "faculty";
-type ReportKind = Scope | "by_category";
+type ReportKind = Scope | "by_category" | "adjuncts";
 
 export function PrintPage() {
   const { session } = useAuth();
@@ -45,7 +45,7 @@ export function PrintPage() {
     const base = import.meta.env.VITE_API_URL || "";
 
     const scope: Scope =
-      reportKind === "by_category" ? "academy" : reportKind;
+      reportKind === "by_category" || reportKind === "adjuncts" ? "academy" : reportKind;
 
     const params = new URLSearchParams({
       report_date: date,
@@ -54,6 +54,9 @@ export function PrintPage() {
 
     if (reportKind === "by_category") {
       params.set("category_code", categoryCode);
+    }
+    if (reportKind === "adjuncts") {
+      params.set("composition", "adjuncts");
     }
 
     if (scope !== "academy") {
@@ -146,6 +149,7 @@ export function PrintPage() {
             <option value="location">Расход по расположению</option>
             <option value="faculty">Расход факультета</option>
             <option value="by_category">По причине отсутствия (вся академия)</option>
+            <option value="adjuncts">Расход по адъюнктам (вся академия)</option>
           </select>
         </div>
         {reportKind === "location" || reportKind === "faculty" ? (

@@ -35,6 +35,10 @@
     src: url("/fonts/Magistral-BoldItalic.ttf") format("truetype");
   }
 
+  :root {
+    --app-header-offset: 7rem;
+  }
+
   body {
     @apply bg-vka-cream text-vka-navy font-sans antialiased;
     font-family: Montserrat, system-ui, sans-serif;

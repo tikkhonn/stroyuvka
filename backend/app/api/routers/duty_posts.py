@@ -1,5 +1,7 @@
 from datetime import date
 
+from app.core.time import today_msk
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,7 +70,7 @@ async def set_post_password(
 @router.post("/{post_id}/clear-registration", response_model=DutyPostClearRegistrationResult)
 async def clear_post_registration(
     post_id: int,
-    contact_date: date = Query(default_factory=date.today),
+    contact_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_shell("admin")),
 ):

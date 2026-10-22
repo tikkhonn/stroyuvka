@@ -330,6 +330,7 @@ export function AttendancePage() {
   const selectedMeta = units.find((u) => u.id === unitId);
   const canSubmitCourse = session?.role === "dpk";
   const isDpf = session?.role === "dpf";
+  const isOfficersRoster = selectedMeta?.kind === "officers";
   const enableRosterSort = session?.role === "dpk" || session?.role === "dpf";
   const isAdmin = session?.shell === "admin";
   const showSubmittedStatus = (canSubmitCourse || isDpf) && snapshot;
@@ -446,6 +447,8 @@ export function AttendancePage() {
             sortState={rosterSortState}
             onSortStateChange={setRosterSortState}
             compactCheckboxActions={isAdmin}
+            showAdjunctColumn={Boolean(isOfficersRoster)}
+            enableAdjunctMarking={Boolean(isDpf && isOfficersRoster)}
           />
 
           <div className="bg-white rounded-lg shadow mb-4 border border-gray-200">

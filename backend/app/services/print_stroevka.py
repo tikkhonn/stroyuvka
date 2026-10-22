@@ -9,10 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import ABSENCE_CATEGORY_DEFS, AbsenceCategoryCode, DutyPostType, UnitType
 from app.models import Unit
 from app.schemas import AbsenceEntryRead, AttendanceAggregate
-from app.services.attendance import compute_aggregate_for_unit, get_attendance_snapshot, _normalize_code
-from app.services.duty_contacts import get_duty_contact_on_date
+from app.services.attendance import (
+    compute_aggregate_for_unit,
+    get_attendance_snapshot,
+    _normalize_code,
+)
+from app.services.adjuncts import build_adjunct_roll_up
+from app.services.duty_contacts import format_duty_officer_for_print, get_duty_contact_on_date
 from app.services.org import get_courses_for_faculty, get_courses_for_location
-from app.services.people import department_display_name, format_rank, normalize_department_code
+from app.services.people import (
+    department_display_name,
+    format_rank,
+    normalize_department_code,
+)
 from app.services.unit_ids import LOCATION_ACADEMY, is_named_unit_id
 
 ACADEMY_TITLE = "Военно-космической академии имени А.Ф. Можайского"
@@ -119,6 +128,29 @@ def _subtitle_for_department(dept_name: str, unit: Unit, report_date: date) -> s
     return f"{dept_name}, {unit.name} {ACADEMY_TITLE} на {_format_date_ru(report_date)}"
 
 
+def _subtitle_for_adjuncts(unit: Unit, report_date: date) -> str:
+    return (
+        f"Строевая записка — адъюнкты, {unit.name} {ACADEMY_TITLE} "
+        f"на {_format_date_ru(report_date)}"
+    )
+
+
+def _subtitle_for_academy_adjuncts(report_date: date) -> str:
+    return (
+        f"Строевая записка — адъюнкты, {ACADEMY_TITLE} "
+        f"на {_format_date_ru(report_date)}"
+    )
+
+
+async def _faculty_adjunct_print_data(
+    session: AsyncSession,
+    faculty_unit: Unit,
+    report_date: date,
+) -> tuple[list[tuple[str, AttendanceAggregate]], list[tuple[str, AbsenceEntryRead]]]:
+    rollup = await build_adjunct_roll_up(session, report_date, faculties=[faculty_unit])
+    return [("Адъюнкты", rollup.aggregate)], rollup.print_absences
+
+
 _PRINT_PAGE_STYLE = """
     @page { size: A4 landscape; margin: 0; }
     html, body {
@@ -159,37 +191,44 @@ _PRINT_PAGE_STYLE = """
     }
     th { font-weight: normal; }
     .duty-sign-footer {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 1.5em;
+      display: grid;
+      grid-template-columns: 1fr minmax(9em, 11em) 1fr;
+      align-items: end;
+      column-gap: 0.4em;
       margin-top: 2.5em;
+      padding-bottom: 1.1em;
       font-size: 12pt;
       page-break-inside: avoid;
     }
-    .duty-sign-left,
-    .duty-sign-right {
-      flex: 1 1 32%;
+    .duty-sign-left {
+      text-align: right;
+      padding-right: 0.15em;
+      padding-bottom: 0.12em;
     }
     .duty-sign-right {
-      text-align: right;
+      text-align: left;
+      padding-left: 0.15em;
+      padding-bottom: 0.12em;
     }
     .duty-sign-center {
-      flex: 1 1 28%;
+      position: relative;
       text-align: center;
     }
     .duty-sign-line {
       display: block;
       border-bottom: 1px solid #000;
       min-width: 9em;
-      height: 1.25em;
+      height: 0;
       margin: 0 auto;
     }
     .duty-sign-caption {
-      display: block;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      margin-top: 0.15em;
       font-size: 10pt;
       color: #444;
-      margin-top: 0.2em;
     }
 """
 
@@ -248,13 +287,8 @@ _PRINT_TOOLBAR_HTML = """
 """
 
 
-def _duty_officer_line(rank: str | None, full_name: str | None) -> str:
-    parts = [p for p in [(rank or "").strip(), (full_name or "").strip()] if p]
-    return " ".join(parts) if parts else "—"
-
-
-def _duty_sign_footer_html(left_label: str, rank: str | None, full_name: str | None) -> str:
-    officer = escape(_duty_officer_line(rank, full_name))
+def _duty_sign_footer_html(left_label: str, officer_line: str) -> str:
+    officer = escape(officer_line)
     return f"""
   <div class="duty-sign-footer">
     <div class="duty-sign-left">{escape(left_label)}</div>
@@ -274,9 +308,8 @@ async def _duty_sign_footer(
     left_label: str,
 ) -> str:
     contact = await get_duty_contact_on_date(session, report_date, unit_id, post_type)
-    rank = format_rank(contact.rank) if contact and contact.rank else None
-    full_name = (contact.full_name or "").strip() if contact else None
-    return _duty_sign_footer_html(left_label, rank, full_name)
+    officer_line = format_duty_officer_for_print(contact)
+    return _duty_sign_footer_html(left_label, officer_line)
 
 
 async def _summary_rows_for_units(
@@ -594,6 +627,22 @@ async def build_stroevka_print(
         )
 
     if scope == "academy":
+        if composition == "adjuncts":
+            rollup = await build_adjunct_roll_up(session, report_date)
+            dpa_footer = await _duty_sign_footer(
+                session,
+                report_date,
+                LOCATION_ACADEMY,
+                DutyPostType.DPA,
+                "Дежурный по академии",
+            )
+            return _build_html(
+                _subtitle_for_academy_adjuncts(report_date),
+                [("Адъюнкты", rollup.aggregate)],
+                rollup.print_absences,
+                duty_footer=dpa_footer,
+            )
+
         fac_result = await session.execute(
             select(Unit)
             .where(Unit.type == UnitType.FACULTY, Unit.is_active.is_(True))
@@ -672,6 +721,21 @@ async def build_stroevka_print(
             absences = [(snap.unit_name, entry) for entry in dept.absences]
             subtitle = _subtitle_for_department(dept.name, unit, report_date)
             return _build_html(subtitle, summary_rows, absences, duty_footer=dpf_footer)
+
+        if composition == "adjuncts":
+            if is_named_unit_id(unit_id):
+                raise ValueError(
+                    "Печать строевой по адъюнктам недоступна для именованного подразделения"
+                )
+            summary_rows, absences = await _faculty_adjunct_print_data(
+                session, unit, report_date
+            )
+            return _build_html(
+                _subtitle_for_adjuncts(unit, report_date),
+                summary_rows,
+                absences,
+                duty_footer=dpf_footer,
+            )
 
         if is_named_unit_id(unit_id):
             courses = await get_courses_for_faculty(session, unit_id)

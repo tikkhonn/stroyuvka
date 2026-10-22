@@ -18,7 +18,7 @@ export function openPrintHtml(html: string, printWindow?: Window | null): Window
   return w;
 }
 
-export type DpfPrintComposition = "all" | "variable" | "permanent";
+export type DpfPrintComposition = "all" | "variable" | "permanent" | "adjuncts";
 
 export async function openDutyStroevkaPrint(options: {
   role: "dpk" | "dpf";

@@ -197,6 +197,8 @@ chmod +x scripts/*.sh
 - `docker compose up --build` и `./scripts/deploy.sh` — они пытаются заново скачать и собрать образы.
 - `docker compose down -v` — флаг `-v` удаляет базу.
 
+Контейнеры настроены с `restart: unless-stopped`: после перезагрузки сервера они поднимутся сами, если служба Docker включена в автозагрузку (`systemctl enable --now docker`). Том `pgdata` при этом не трогается. Явный `docker compose stop` или `down` оставляет контейнеры выключенными до следующего `docker compose up`.
+
 ### 5. Как открывают сайт
 
 С компьютера в локальной сети академии: `http://<IP-сервера>:5173`.

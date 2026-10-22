@@ -14,6 +14,7 @@ from app.schemas import (
     ChessboardSickEntry,
     ChessboardSickSummary,
 )
+from app.services.adjuncts import build_chessboard_adjunct_summary
 from app.services.attendance import (
     assert_unit_sick_have_hospitals,
     compute_academy_aggregate,
@@ -730,11 +731,13 @@ async def build_chessboard(
     else:
         rows = await build_chessboard_faculty(session, report_date)
     sick_summary = await build_chessboard_sick_summary(session, report_date)
+    adjunct_summary = await build_chessboard_adjunct_summary(session, report_date)
     return ChessboardResponse(
         report_date=report_date,
         view=view,
         rows=rows,
         sick_summary=sick_summary,
+        adjunct_summary=adjunct_summary,
     )
 
 

@@ -1,5 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChessboardResponse, ChessboardRow, ChessboardSickByHospital, ChessboardSickEntry, ChessboardSickSummary, api } from "../api/client";
+import {
+  ChessboardAdjunctSummary,
+  ChessboardResponse,
+  ChessboardRow,
+  ChessboardSickByHospital,
+  ChessboardSickEntry,
+  ChessboardSickSummary,
+  api,
+} from "../api/client";
+import { SummaryCards } from "../components/SummaryCards";
 import { formatDateRu, todayLocal } from "../utils/date";
 import { ReportPipelineBar } from "../components/ReportPipelineBar";
 import { aggregateCellClass } from "../components/SummaryCards";
@@ -9,7 +18,7 @@ import { KNOWN_LOCATIONS, LOCATION_ACADEMY } from "../constants/locations";
 import { pluralCourses } from "../utils/plural";
 
 type View = "faculty" | "location";
-type PanelFilter = "all" | "sick" | number;
+type PanelFilter = "all" | "sick" | "adjuncts" | number;
 
 const COLS = [
   { key: "total_list", label: "По списку" },
@@ -274,11 +283,58 @@ function SickListTable({ summary }: { summary: ChessboardSickSummary }) {
   );
 }
 
+function AdjunctPanel({ summary }: { summary: ChessboardAdjunctSummary }) {
+  const agg = summary.aggregate;
+  const entries = summary.entries;
+
+  return (
+    <div className="space-y-4">
+      <SummaryCards agg={agg} />
+      <div>
+        <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Отсутствующие</p>
+        {entries.length === 0 ? (
+          <div className="bg-white rounded-lg shadow px-4 py-8 text-center text-gray-500">
+            Отсутствующих адъюнктов нет
+          </div>
+        ) : (
+          <div className="overflow-x-auto bg-white rounded-lg shadow">
+            <table className="vka-table w-full min-w-[720px]">
+              <thead>
+                <tr>
+                  <th>№</th>
+                  <th>ФИО</th>
+                  <th>Факультет</th>
+                  <th>Причина</th>
+                  <th>С</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, i) => (
+                  <tr key={entry.id}>
+                    <td className="text-gray-500">{i + 1}</td>
+                    <td className="font-medium text-left text-vka-navy">
+                      {[entry.rank, entry.last_name].filter(Boolean).join(" ") || "—"}
+                    </td>
+                    <td className="text-left">{entry.faculty_name}</td>
+                    <td className="text-left">{entry.reason}</td>
+                    <td className="whitespace-nowrap">{formatDateRu(entry.status_date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ChessboardPage() {
   const [date, setDate] = useState(todayLocal());
   const [view, setView] = useState<View>("location");
   const [rows, setRows] = useState<ChessboardRow[]>([]);
   const [sickSummary, setSickSummary] = useState<ChessboardSickSummary | null>(null);
+  const [adjunctSummary, setAdjunctSummary] = useState<ChessboardAdjunctSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [panelFilter, setPanelFilter] = useState<PanelFilter>("all");
 
@@ -290,16 +346,24 @@ export function ChessboardPage() {
       .then((data) => {
         setRows(data.rows);
         setSickSummary(data.sick_summary ?? null);
+        setAdjunctSummary(data.adjunct_summary ?? null);
       })
       .catch(() => {
         setRows([]);
         setSickSummary(null);
+        setAdjunctSummary(null);
       })
       .finally(() => setLoading(false));
   }, [date, view]);
 
   useEffect(() => {
-    if (view !== "location" && panelFilter !== "sick") setPanelFilter("all");
+    if (
+      view !== "location" &&
+      panelFilter !== "sick" &&
+      panelFilter !== "adjuncts"
+    ) {
+      setPanelFilter("all");
+    }
   }, [view, panelFilter]);
 
   const sickData = useMemo(
@@ -407,7 +471,7 @@ export function ChessboardPage() {
         </div>
       </div>
 
-      {!loading && sickSummary ? (
+      {!loading && sickSummary && adjunctSummary ? (
         <div className="mb-4">
           {view === "location" ? (
             <p className="text-sm text-gray-600 mb-2">
@@ -482,6 +546,26 @@ export function ChessboardPage() {
                   : ""}
               </div>
             </button>
+            <button
+              type="button"
+              onClick={() => setPanelFilter("adjuncts")}
+              className={`rounded-lg border-2 px-4 py-3 text-left min-w-[160px] transition-colors ${
+                panelFilter === "adjuncts"
+                  ? "border-vka-navy bg-vka-navy text-white shadow-md"
+                  : "border-gray-200 bg-white hover:border-vka-navy/40"
+              }`}
+            >
+              <div className="text-xs uppercase tracking-wide opacity-80">Сводка</div>
+              <div className="font-semibold text-base">Адъюнкты</div>
+              <div
+                className={`text-xs mt-1 ${
+                  panelFilter === "adjuncts" ? "text-white/90" : "text-gray-500"
+                }`}
+              >
+                всего {adjunctSummary.aggregate.total_list} · на лицо{" "}
+                {adjunctSummary.aggregate.present}
+              </div>
+            </button>
           </div>
         </div>
       ) : null}
@@ -490,6 +574,8 @@ export function ChessboardPage() {
         <p>Загрузка...</p>
       ) : panelFilter === "sick" && sickData ? (
         <SickListTable summary={sickData} />
+      ) : panelFilter === "adjuncts" && adjunctSummary ? (
+        <AdjunctPanel summary={adjunctSummary} />
       ) : view === "location" ? (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
           <table className="vka-table w-full min-w-[1240px]">

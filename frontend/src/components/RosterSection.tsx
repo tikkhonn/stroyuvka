@@ -83,6 +83,8 @@ type Props = {
   sortState?: RosterSortState;
   onSortStateChange?: (state: RosterSortState) => void;
   compactCheckboxActions?: boolean;
+  showAdjunctColumn?: boolean;
+  enableAdjunctMarking?: boolean;
 };
 
 export function RosterSection({
@@ -103,6 +105,8 @@ export function RosterSection({
   sortState: sortStateProp,
   onSortStateChange,
   compactCheckboxActions = false,
+  showAdjunctColumn = false,
+  enableAdjunctMarking = false,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [internalOpen, setInternalOpen] = useState(true);
@@ -114,6 +118,8 @@ export function RosterSection({
   };
   const [localEditing, setLocalEditing] = useState(false);
   const [absenceEditing, setAbsenceEditing] = useState(false);
+  const [adjunctEditing, setAdjunctEditing] = useState(false);
+  const [adjunctSortActive, setAdjunctSortActive] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("duty");
@@ -185,6 +191,16 @@ export function RosterSection({
   }, [activePeople, query]);
 
   const displayPeople = useMemo(() => {
+    if (adjunctSortActive && showAdjunctColumn) {
+      const rows = [...filtered];
+      rows.sort((a, b) => {
+        const adjunctRank = (person: PersonRead) => (person.is_adjunct ? 0 : 1);
+        const byAdjunct = adjunctRank(a) - adjunctRank(b);
+        if (byAdjunct !== 0) return byAdjunct;
+        return comparePersonNamesAsc(a, b);
+      });
+      return rows;
+    }
     if (!enableSort) return filtered;
     const rows = [...filtered];
     rows.sort((a, b) => {
@@ -216,16 +232,25 @@ export function RosterSection({
       return comparePersonNamesAsc(a, b);
     });
     return rows;
-  }, [absenceByPersonId, categories, filtered, enableSort, sortState]);
+  }, [
+    absenceByPersonId,
+    categories,
+    filtered,
+    enableSort,
+    sortState,
+    adjunctSortActive,
+    showAdjunctColumn,
+  ]);
 
   const handleSortArrow = (key: RosterSortKey, dir: "asc" | "desc") => {
+    setAdjunctSortActive(false);
     setSortState((prev) => {
       if (prev.key === key && prev.dir === dir) return prev;
       return { key, dir };
     });
   };
 
-  const canSelect = editable && absenceEditing;
+  const canSelect = editable && (absenceEditing || adjunctEditing);
   const allSelected =
     canSelect && displayPeople.length > 0 && displayPeople.every((p) => selected.has(p.id));
 
@@ -244,7 +269,7 @@ export function RosterSection({
     setSelected(next);
   };
 
-  const resetAbsenceDraft = () => {
+  const resetSelectionDraft = () => {
     setSelected(new Set());
     setBulkNote("");
   };
@@ -258,22 +283,52 @@ export function RosterSection({
       return;
     }
     setAbsenceEditing(false);
-    resetAbsenceDraft();
+    setAdjunctEditing(false);
+    setAdjunctSortActive(false);
+    resetSelectionDraft();
     setLocalEditing(true);
   };
 
   const toggleAbsenceEditing = () => {
     if (absenceEditing) {
       setAbsenceEditing(false);
-      resetAbsenceDraft();
+      resetSelectionDraft();
       return;
     }
     setLocalEditing(false);
+    setAdjunctEditing(false);
     setNewRank("");
     setNewFullName("");
     setNewDepartment("");
     setAbsenceEditing(true);
   };
+
+  const toggleAdjunctEditing = () => {
+    if (adjunctEditing) {
+      setAdjunctEditing(false);
+      resetSelectionDraft();
+      return;
+    }
+    setLocalEditing(false);
+    setAbsenceEditing(false);
+    setNewRank("");
+    setNewFullName("");
+    setNewDepartment("");
+    setAdjunctEditing(true);
+  };
+
+  const selectedForAdjunct = useMemo(
+    () => displayPeople.filter((person) => selected.has(person.id)),
+    [displayPeople, selected]
+  );
+
+  const adjunctMarkLabel =
+    selectedForAdjunct.length > 0 && selectedForAdjunct.every((person) => person.is_adjunct)
+      ? "Снять отметку"
+      : "Отметить";
+
+  const showActionColumn = editable || showAdjunctColumn;
+  const tableColSpan = 5 + (editable ? 1 : 0) + (showActionColumn ? 1 : 0);
 
   const addPerson = async (e: FormEvent) => {
     e.preventDefault();
@@ -310,6 +365,36 @@ export function RosterSection({
       setSelected((prev) => {
         const next = new Set(prev);
         next.delete(person.id);
+        return next;
+      });
+      await onReload();
+    } catch (err) {
+      onMessage(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markAdjunct = async () => {
+    const ids = [...selected];
+    if (ids.length === 0) {
+      onMessage("Выберите людей из списка");
+      return;
+    }
+    const selectedPeople = displayPeople.filter((person) => ids.includes(person.id));
+    const allAdjunct =
+      selectedPeople.length > 0 && selectedPeople.every((person) => person.is_adjunct);
+    const is_adjunct = !allAdjunct;
+    setSaving(true);
+    onMessage("");
+    try {
+      await api(`/api/attendance/${unitId}/people/adjunct?report_date=${reportDate}`, {
+        method: "POST",
+        body: JSON.stringify({ person_ids: ids, is_adjunct }),
+      });
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
         return next;
       });
       await onReload();
@@ -530,6 +615,15 @@ export function RosterSection({
                 {absenceEditing ? "Готово" : "Редактировать расход"}
               </button>
             )}
+            {editable && enableAdjunctMarking && (
+              <button
+                type="button"
+                onClick={toggleAdjunctEditing}
+                className="rounded border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                {adjunctEditing ? "Готово" : "Отметить адъюнкта"}
+              </button>
+            )}
           </div>
 
           {editable && localEditing && (
@@ -578,10 +672,26 @@ export function RosterSection({
             </form>
           )}
 
+          {editable && adjunctEditing && (
+            <div className="sticky z-40 top-[var(--app-header-offset)] flex flex-wrap items-end justify-between gap-2 w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded mb-4 shadow-sm">
+              <span className="text-sm text-vka-navy whitespace-nowrap pb-2">
+                Выбрано: {selected.size}
+              </span>
+              <button
+                type="button"
+                onClick={() => void markAdjunct()}
+                disabled={saving || selected.size === 0}
+                className="bg-vka-navy text-white px-3 py-2 rounded text-sm disabled:opacity-50 shrink-0"
+              >
+                {adjunctMarkLabel}
+              </button>
+            </div>
+          )}
+
           {editable && absenceEditing && (
             <form
               onSubmit={markSelected}
-              className="flex flex-wrap items-end justify-between gap-2 w-full bg-amber-50 border border-amber-200 px-3 py-2 rounded mb-4"
+              className="sticky z-40 top-[var(--app-header-offset)] flex flex-wrap items-end justify-between gap-2 w-full bg-amber-50 border border-amber-200 px-3 py-2 rounded mb-4 shadow-sm"
             >
               <div className="flex flex-wrap gap-2 items-end flex-1 min-w-0">
                 <span className="text-sm text-amber-900 whitespace-nowrap pb-2">
@@ -629,7 +739,7 @@ export function RosterSection({
               <tr>
                 {editable && (
                   <th className="w-10 align-middle">
-                    {absenceEditing && (
+                    {(absenceEditing || adjunctEditing) && (
                       <input
                         type="checkbox"
                         className={checkboxClass}
@@ -688,13 +798,39 @@ export function RosterSection({
                     ) : null}
                   </span>
                 </th>
-                {editable && <th className="w-16"></th>}
+                {showActionColumn && (
+                  <th className="w-16 align-middle text-center">
+                    {showAdjunctColumn && !localEditing ? (
+                      <button
+                        type="button"
+                        aria-label={
+                          adjunctSortActive
+                            ? "Вернуть обычный порядок"
+                            : "Показать адъюнктов сверху"
+                        }
+                        title={
+                          adjunctSortActive
+                            ? "Вернуть обычный порядок"
+                            : "Адъюнкты сверху"
+                        }
+                        onClick={() => setAdjunctSortActive((active) => !active)}
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs font-bold ${
+                          adjunctSortActive
+                            ? "border-vka-gold bg-vka-gold/30 text-vka-navy"
+                            : "border-white/30 text-white/70 hover:border-vka-gold/60 hover:text-vka-gold"
+                        }`}
+                      >
+                        А
+                      </button>
+                    ) : null}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {displayPeople.length === 0 ? (
                 <tr>
-                  <td colSpan={editable ? 7 : 6} className="text-gray-500 text-sm">
+                  <td colSpan={tableColSpan} className="text-gray-500 text-sm">
                     Список пуст — загрузите файл или добавьте человека вручную
                   </td>
                 </tr>
@@ -708,7 +844,7 @@ export function RosterSection({
                   <tr key={person.id} className={rowClass}>
                     {editable && (
                       <td className="w-10 align-middle">
-                        {absenceEditing && (
+                        {(absenceEditing || adjunctEditing) && (
                           <input
                             type="checkbox"
                             className={checkboxClass}
@@ -723,9 +859,9 @@ export function RosterSection({
                     <td>{person.department_code || "—"}</td>
                     <td>{person.display_name || person.full_name}</td>
                     <td>{reasonForPerson(person.id)}</td>
-                    {editable && (
-                      <td className="w-16 align-middle">
-                        {localEditing && (
+                    {showActionColumn && (
+                      <td className="w-16 align-middle text-center">
+                        {editable && localEditing ? (
                           <button
                             type="button"
                             onClick={() => void deactivate(person)}
@@ -733,7 +869,14 @@ export function RosterSection({
                           >
                             Удалить
                           </button>
-                        )}
+                        ) : showAdjunctColumn && person.is_adjunct ? (
+                          <span
+                            title="Адъюнкт"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-vka-gold/60 bg-vka-gold/15 text-xs font-bold text-vka-navy"
+                          >
+                            А
+                          </span>
+                        ) : null}
                       </td>
                     )}
                   </tr>

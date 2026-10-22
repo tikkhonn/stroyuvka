@@ -162,21 +162,21 @@ function DepartmentBlock({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border rounded-lg mb-2 border-gray-100 bg-gray-50/50">
+    <div className="border rounded-lg mb-4 border-gray-200 bg-gray-50/80">
       <button
         type="button"
-        className="w-full flex flex-wrap items-center gap-3 px-3 py-2 text-left"
+        className="w-full flex flex-wrap items-center gap-4 px-4 py-3.5 text-left min-h-[3.25rem]"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="font-medium text-vka-navy text-sm">
+        <span className="font-semibold text-vka-navy text-base leading-snug">
           {open ? "▼" : "▶"} {dept.name}
         </span>
-        <span className="text-sm text-gray-600 ml-auto">
+        <span className="text-sm text-gray-600 ml-auto shrink-0">
           список {dept.aggregate.total_list} · на лицо {dept.aggregate.present}
         </span>
       </button>
       {open && (
-        <div className="px-3 pb-3 border-t border-gray-100">
+        <div className="px-4 pb-4 border-t border-gray-100">
           <SummaryCards agg={dept.aggregate} />
           <div className="mt-3">
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Отсутствующие</p>
@@ -210,7 +210,7 @@ function OfficersCard({
         className="w-full flex flex-wrap items-center gap-3 px-4 py-3 text-left"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="font-medium text-vka-navy">
+        <span className="font-bold text-vka-navy">
           {open ? "▼" : "▶"} Офицеры / постоянный состав
         </span>
         {role === "dpa" ? (
@@ -429,7 +429,7 @@ function AggregatedCoursesCard({
         className="w-full flex flex-wrap items-center gap-3 px-4 py-3 text-left"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="font-medium text-vka-navy">
+        <span className="font-bold text-vka-navy">
           {open ? "▼" : "▶"} {title}
         </span>
         <span className="text-sm text-gray-600 ml-auto">

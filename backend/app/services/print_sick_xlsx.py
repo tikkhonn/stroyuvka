@@ -27,11 +27,33 @@ from app.services.attendance import (
     _normalize_code,
 )
 from app.services.org import get_courses_for_faculty, get_courses_for_location
+from app.services.adjuncts import AdjunctRollUp, absence_reason_label, build_adjunct_roll_up
 from app.services.reports import build_chessboard_sick_summary
 from app.services.unit_ids import LOCATION_LEKHTUSI, LOCATION_NAMES, LOCATION_PUSHKIN
 
 SICK_HEADERS = ("№", "Подр", "Фамилия, инициалы", "Мед. учреждение", "Диагноз", "Дата")
 SICK_COL_WIDTHS = (6, 10, 28, 24, 28, 14)
+
+ADJUNCT_SUMMARY_HEADERS = (
+    "Подразделение",
+    "П/С",
+    "Н/Л",
+    "Н",
+    "К",
+    "О",
+    "Б",
+    "Увольн.",
+    "Прочее",
+    "Арест",
+)
+ADJUNCT_ABSENCE_HEADERS = (
+    "№",
+    "Воинское звание",
+    "Фамилия, имя, отчество",
+    "Факультет",
+    "Причина отсутствия",
+    "С",
+)
 
 ACADEMY_HEADERS = (
     "Подразделение",
@@ -339,6 +361,62 @@ def _write_variable_sheet(
     ws.freeze_panes = "A3"
 
 
+def _write_adjunct_sheet(
+    ws: Worksheet,
+    report_date: date,
+    rollup: AdjunctRollUp,
+) -> None:
+    ws.title = "Адъюнкты"
+    agg = rollup.aggregate
+    present_for_report = agg.present + agg.dismissal + agg.away_dorm + agg.other
+    _write_title(
+        ws,
+        f"Расход адъюнктов на {_date_cell(report_date)}",
+        len(ADJUNCT_SUMMARY_HEADERS),
+    )
+    _write_header_row(ws, ADJUNCT_SUMMARY_HEADERS, 2)
+    summary_values = (
+        "Адъюнкты",
+        _num(agg.total_list),
+        _num(present_for_report),
+        _num(agg.duty),
+        _num(agg.trip),
+        _num(agg.leave),
+        _num(agg.sick),
+        _num(agg.dismissal),
+        _num(agg.other + agg.away_dorm),
+        _num(agg.arrest),
+    )
+    thin, _title_font, header_font, center, left = _styles()
+    for col, value in enumerate(summary_values, start=1):
+        cell = ws.cell(3, col, value)
+        cell.border = thin
+        cell.alignment = left if col == 1 else center
+        if col == 1:
+            cell.font = header_font
+
+    header_row = 5
+    _write_header_row(ws, ADJUNCT_ABSENCE_HEADERS, header_row)
+    for index, (faculty_name, entry) in enumerate(rollup.print_absences, start=1):
+        row_idx = header_row + index
+        values = (
+            index,
+            entry.rank or "",
+            entry.last_name,
+            faculty_name,
+            absence_reason_label(entry),
+            _date_cell(entry.status_date),
+        )
+        aligns = (center, center, left, left, left, center)
+        for col, (value, alignment) in enumerate(zip(values, aligns), start=1):
+            cell = ws.cell(row_idx, col, value)
+            cell.alignment = alignment
+            cell.border = thin
+
+    _set_widths(ws, (6, 14, 28, 22, 32, 12))
+    ws.freeze_panes = "A3"
+
+
 def _write_sick_sheet(ws: Worksheet, report_date: date, entries: list[ChessboardSickEntry]) -> None:
     ws.title = "Больные все"
     thin, _title_font, _header_font, center, left = _styles()
@@ -407,6 +485,7 @@ def _facility_columns(
 async def build_sick_xlsx(session: AsyncSession, report_date: date) -> bytes:
     academy = await compute_academy_aggregate(session, report_date)
     sick_summary = await build_chessboard_sick_summary(session, report_date)
+    adjunct_rollup = await build_adjunct_roll_up(session, report_date)
 
     faculties = list(
         (
@@ -487,6 +566,7 @@ async def build_sick_xlsx(session: AsyncSession, report_date: date) -> bytes:
         pushkin_lines,
     )
     _write_sick_sheet(wb.create_sheet(), report_date, sick_summary.entries)
+    _write_adjunct_sheet(wb.create_sheet(), report_date, adjunct_rollup)
 
     buf = io.BytesIO()
     wb.save(buf)

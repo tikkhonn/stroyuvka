@@ -1,4 +1,6 @@
 from datetime import date
+
+from app.core.time import today_msk
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,14 +31,17 @@ def _can_print_academy(user: AuthUser) -> bool:
 
 @router.get("/stroevaya", response_class=HTMLResponse)
 async def stroevaya(
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     scope: str = Query("unit", pattern="^(unit|location|faculty|academy)$"),
     unit_id: int | None = None,
     category_code: str | None = Query(None, description="Фильтр по причине отсутствия"),
     composition: str = Query(
         "all",
-        pattern="^(all|variable|permanent)$",
-        description="Состав факультета: all — курсы и офицеры, variable — только курсы, permanent — только офицеры",
+        pattern="^(all|variable|permanent|adjuncts)$",
+        description=(
+            "Состав факультета: all — курсы и офицеры, variable — только курсы, "
+            "permanent — только офицеры, adjuncts — только адъюнкты (scope=faculty)"
+        ),
     ),
     department_code: str | None = Query(
         None,
@@ -86,7 +91,13 @@ async def stroevaya(
 
     if department_code and scope != "faculty":
         raise HTTPException(400, "department_code доступен только для scope=faculty")
-    if scope != "faculty" and composition != "all":
+    if department_code and composition == "adjuncts":
+        raise HTTPException(400, "department_code несовместим с composition=adjuncts")
+    if composition == "adjuncts" and scope not in ("faculty", "academy"):
+        raise HTTPException(
+            400, "composition=adjuncts доступен только для scope=faculty или scope=academy"
+        )
+    if scope not in ("faculty", "academy") and composition != "all":
         composition = "all"
 
     try:
@@ -106,7 +117,7 @@ async def stroevaya(
 
 @router.get("/sick.xlsx")
 async def sick_xlsx(
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):

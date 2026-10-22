@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthSession } from "../api/client";
@@ -206,9 +206,18 @@ function dutyPrintHandler(session: AuthSession) {
   };
 }
 
+function syncAppHeaderOffset(headerEl: HTMLElement | null) {
+  if (!headerEl) return;
+  document.documentElement.style.setProperty(
+    "--app-header-offset",
+    `${headerEl.offsetHeight}px`
+  );
+}
+
 function Header({ onDpfPrint }: { onDpfPrint: () => void }) {
   const { session } = useAuth();
   const location = useLocation();
+  const headerRef = useRef<HTMLElement>(null);
   const { navHasUnread } = useChatUnread();
   const nav = session ? navForSession(session) : [];
   const primaryNav = nav.filter((item) => !SECONDARY_NAV_PATHS.has(item.to));
@@ -241,8 +250,28 @@ function Header({ onDpfPrint }: { onDpfPrint: () => void }) {
     );
   };
 
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const update = () => syncAppHeaderOffset(el);
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("resize", update);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [nav.length, location.pathname]);
+
   return (
-    <header className="sticky top-0 z-50 bg-vka-navy text-white shadow-vka-lg no-print border-b-2 border-vka-gold">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-50 bg-vka-navy text-white shadow-vka-lg no-print border-b-2 border-vka-gold"
+    >
       <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">

@@ -1,6 +1,8 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.core.time import today_msk
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import DutyPostType
@@ -38,7 +40,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 @router.post("/courses/{course_id}/submit")
 async def submit_course(
     course_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPK)),
 ):
@@ -76,7 +78,7 @@ async def submit_course(
 @router.post("/courses/{course_id}/start-editing")
 async def start_editing_course(
     course_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPK, DutyPostType.DPF)),
 ):
@@ -108,7 +110,7 @@ async def start_editing_course(
 async def reject_course(
     course_id: int,
     body: RejectRequest,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -128,7 +130,7 @@ async def reject_course(
 @router.post("/faculties/{faculty_id}/submit")
 async def submit_faculty(
     faculty_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPF)),
 ):
@@ -169,7 +171,7 @@ async def submit_faculty(
 @router.post("/faculties/{faculty_id}/start-editing")
 async def start_editing_faculty(
     faculty_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPF)),
 ):
@@ -191,7 +193,7 @@ async def start_editing_faculty(
 @router.post("/faculties/{faculty_id}/approve")
 async def approve_faculty(
     faculty_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPF)),
 ):
@@ -223,7 +225,7 @@ async def approve_faculty(
 async def reject_faculty(
     faculty_id: int,
     body: RejectRequest,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPA)),
 ):
@@ -238,7 +240,7 @@ async def reject_faculty(
 
 @router.get("/chessboard", response_model=ChessboardResponse)
 async def chessboard(
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     view: str = Query("faculty", pattern="^(faculty|location)$"),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPA)),
@@ -249,7 +251,7 @@ async def chessboard(
 
 @router.get("/overview", response_model=OverviewResponse)
 async def academy_overview(
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_shell("chief", "admin")),
 ):
@@ -260,7 +262,7 @@ async def academy_overview(
 @router.get("/trends", response_model=TrendsResponse)
 async def academy_trends(
     from_date: date | None = Query(None, alias="from"),
-    to_date: date = Query(default_factory=date.today, alias="to"),
+    to_date: date = Query(default_factory=today_msk, alias="to"),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_shell("chief", "admin")),
 ):
@@ -274,7 +276,7 @@ async def academy_trends(
 @router.get("/stroevka/faculty/{faculty_id}", response_model=FacultyStroevkaBundle)
 async def faculty_stroevka(
     faculty_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -291,7 +293,7 @@ async def faculty_stroevka(
 
 @router.get("/stroevka/academy", response_model=list[FacultyStroevkaBundle])
 async def academy_stroevka(
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPA)),
 ):
@@ -302,7 +304,7 @@ async def academy_stroevka(
 @router.post("/courses/{course_id}/ack-dpf")
 async def ack_dpf(
     course_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPF)),
 ):
@@ -328,7 +330,7 @@ async def ack_dpf(
 @router.post("/courses/{course_id}/ack-dpa")
 async def ack_dpa(
     course_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_duty_post(DutyPostType.DPA)),
 ):

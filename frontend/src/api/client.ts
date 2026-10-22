@@ -210,6 +210,7 @@ export interface PersonRead {
   composition: string;
   position: string | null;
   department_code: string | null;
+  is_adjunct: boolean;
   is_active: boolean;
   full_name: string;
   display_name: string;
@@ -379,11 +380,29 @@ export interface ChessboardSickSummary {
   entries: ChessboardSickEntry[];
 }
 
+export interface ChessboardAdjunctEntry {
+  id: number;
+  faculty_id: number;
+  faculty_name: string;
+  rank: string;
+  last_name: string;
+  category_code: string;
+  reason: string;
+  note?: string | null;
+  status_date: string;
+}
+
+export interface ChessboardAdjunctSummary {
+  aggregate: AttendanceAggregate;
+  entries: ChessboardAdjunctEntry[];
+}
+
 export interface ChessboardResponse {
   report_date: string;
   view: string;
   rows: ChessboardRow[];
   sick_summary: ChessboardSickSummary;
+  adjunct_summary: ChessboardAdjunctSummary;
 }
 
 export interface OverviewUnitBreakdown {

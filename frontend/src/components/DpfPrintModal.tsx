@@ -8,6 +8,7 @@ export type DpfPrintChoice =
   | { kind: "all" }
   | { kind: "variable" }
   | { kind: "permanent" }
+  | { kind: "adjuncts" }
   | { kind: "department"; code: string };
 
 type DpfPrintModalProps = {
@@ -25,6 +26,7 @@ function choiceValue(choice: DpfPrintChoice): string {
 function choiceFromValue(value: string, departments: DepartmentStroevkaSummary[]): DpfPrintChoice {
   if (value === "variable") return { kind: "variable" };
   if (value === "permanent") return { kind: "permanent" };
+  if (value === "adjuncts") return { kind: "adjuncts" };
   if (value.startsWith("department:")) {
     const code = value.slice("department:".length);
     if (departments.some((d) => d.code === code)) {
@@ -116,6 +118,7 @@ export function DpfPrintModal({ open, onClose, onPrinted, facultyId }: DpfPrintM
       : [
           { value: "variable", label: "Строевая записка переменного состава" },
           { value: "permanent", label: "Строевая записка постоянного состава" },
+          { value: "adjuncts", label: "Строевая записка — адъюнкты" },
         ]),
     ...departments.map((dept) => ({
       value: choiceValue({ kind: "department", code: dept.code! }),

@@ -143,9 +143,15 @@ class PersonRead(ORMModel):
     composition: Composition
     position: str | None
     department_code: str | None = None
+    is_adjunct: bool = False
     is_active: bool
     full_name: str = ""
     display_name: str = ""
+
+
+class PersonAdjunctBulkUpdate(BaseModel):
+    person_ids: list[int]
+    is_adjunct: bool
 
 
 # --- Absence ---
@@ -433,11 +439,29 @@ class ChessboardSickSummary(BaseModel):
     entries: list[ChessboardSickEntry]
 
 
+class ChessboardAdjunctEntry(BaseModel):
+    id: int
+    faculty_id: int
+    faculty_name: str
+    rank: str
+    last_name: str
+    category_code: str
+    reason: str
+    note: str | None = None
+    status_date: date
+
+
+class ChessboardAdjunctSummary(BaseModel):
+    aggregate: AttendanceAggregate
+    entries: list[ChessboardAdjunctEntry]
+
+
 class ChessboardResponse(BaseModel):
     report_date: date
     view: str = "faculty"
     rows: list[ChessboardRow]
     sick_summary: ChessboardSickSummary
+    adjunct_summary: ChessboardAdjunctSummary
 
 
 # --- Chief overview / trends ---

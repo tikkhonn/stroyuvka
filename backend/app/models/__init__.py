@@ -48,6 +48,7 @@ class Person(Base):
     composition: Mapped[Composition] = mapped_column(String(32))
     position: Mapped[str | None] = mapped_column(String(255), nullable=True)
     department_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_adjunct: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
 
     unit: Mapped["Unit"] = relationship("Unit", back_populates="people")

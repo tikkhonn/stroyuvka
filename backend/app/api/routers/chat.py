@@ -1,6 +1,8 @@
 from datetime import date
 from urllib.parse import quote
 
+from app.core.time import today_msk
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -154,7 +156,7 @@ async def download_attachment(
 
 @router.get("/duty-contacts/self/status", response_model=DutyContactStatus)
 async def self_contact_status(
-    contact_date: date = Query(default_factory=date.today),
+    contact_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -185,7 +187,7 @@ async def self_contact_status(
 @router.post("/duty-contacts/self", response_model=DutyContactRead)
 async def register_self_contact_route(
     body: DutySelfRegister,
-    contact_date: date = Query(default_factory=date.today),
+    contact_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -213,7 +215,7 @@ async def register_self_contact_route(
 
 @router.post("/duty-contacts/self/shift-change")
 async def shift_change_route(
-    contact_date: date = Query(default_factory=date.today),
+    contact_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -254,7 +256,7 @@ async def shift_change_route(
 
 @router.get("/duty-contacts", response_model=list[DutyContactRead])
 async def list_contacts(
-    contact_date: date = Query(default_factory=date.today),
+    contact_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -269,7 +271,7 @@ async def upsert_contact(
     user: AuthUser = Depends(get_current_user),
 ):
     await ensure_duty_contact_schema(session)
-    contact_date = body.contact_date or date.today()
+    contact_date = body.contact_date or today_msk()
     result = await session.execute(
         select(DutyContact).where(
             DutyContact.contact_date == contact_date,

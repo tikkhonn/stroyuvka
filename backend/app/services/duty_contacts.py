@@ -230,19 +230,70 @@ async def get_duty_contact_on_date(
     unit_id: int,
     post_type: DutyPostType,
 ) -> DutyContact | None:
-    """Дежурный, зарегистрировавшийся на посту unit_id в указанную дату."""
-    result = await session.execute(
-        select(DutyContact)
-        .join(DutyPost, DutyContact.duty_post_id == DutyPost.id)
+    """Дежурный на посту подразделения unit_id на дату отчёта (по duty_post_id)."""
+    post_result = await session.execute(
+        select(DutyPost.id)
         .where(
-            DutyContact.contact_date == contact_date,
-            DutyContact.unit_id == unit_id,
-            DutyContact.duty_post_id.isnot(None),
-            DutyPost.post_type == post_type.value,
+            DutyPost.unit_id == unit_id,
+            DutyPost.post_type == post_type,
+            DutyPost.is_active.is_(True),
         )
+        .order_by(DutyPost.id)
         .limit(1)
     )
-    return result.scalar_one_or_none()
+    duty_post_id = post_result.scalar_one_or_none()
+    if duty_post_id is None:
+        return None
+    result = await session.execute(
+        select(DutyContact).where(
+            DutyContact.contact_date == contact_date,
+            DutyContact.duty_post_id == duty_post_id,
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if contact:
+        return contact
+    recent = await session.execute(
+        select(DutyContact)
+        .where(
+            DutyContact.duty_post_id == duty_post_id,
+            DutyContact.contact_date <= contact_date,
+        )
+        .order_by(DutyContact.contact_date.desc(), DutyContact.id.desc())
+        .limit(1)
+    )
+    contact = recent.scalar_one_or_none()
+    if contact:
+        return contact
+    legacy = await session.execute(
+        select(DutyContact)
+        .where(
+            DutyContact.contact_date <= contact_date,
+            DutyContact.unit_id == unit_id,
+            DutyContact.duty_post_id.is_(None),
+        )
+        .order_by(DutyContact.contact_date.desc(), DutyContact.id.desc())
+        .limit(1)
+    )
+    return legacy.scalar_one_or_none()
+
+
+def format_duty_officer_for_print(contact: DutyContact | None) -> str:
+    """Звание и ФИО (или фамилия) дежурного для блока подписи на печати."""
+    if not contact:
+        return "—"
+    rank_raw = (contact.rank or "").strip()
+    full_name = (contact.full_name or "").strip()
+    if full_name:
+        rank_fmt = format_rank(rank_raw) if rank_raw else ""
+        parts = [p for p in (rank_fmt, full_name) if p]
+        return " ".join(parts)
+    post_name = (contact.post_name or "").strip()
+    if ": " in post_name:
+        tail = post_name.split(": ", 1)[1].strip()
+        if tail:
+            return tail
+    return post_name if post_name else "—"
 
 
 async def list_contacts_for_user(

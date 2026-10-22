@@ -18,6 +18,7 @@ import { AdminDutyContactsPage } from "../pages/AdminDutyContactsPage";
 import { ChiefOverviewPage } from "../pages/ChiefOverviewPage";
 import { ChiefTrendsPage } from "../pages/ChiefTrendsPage";
 import { homePath } from "../lib/homePath";
+import { ScrollToTopButton } from "../components/ScrollToTopButton";
 
 function HomeRedirect() {
   const { session } = useAuth();
@@ -84,7 +85,9 @@ function ProtectedLayout() {
 
 export function AppRouter() {
   return (
-    <Routes>
+    <>
+      <ScrollToTopButton />
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRedirect />} />
@@ -213,5 +216,6 @@ export function AppRouter() {
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </>
   );
 }

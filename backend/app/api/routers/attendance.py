@@ -1,6 +1,8 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+
+from app.core.time import today_msk
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,6 +28,7 @@ from app.schemas import (
     AttendanceUnitOption,
     AuthUser,
     PersonRead,
+    PersonAdjunctBulkUpdate,
     PersonRosterWrite,
     PersonRosterPatch,
     RosterImportPreview,
@@ -43,6 +46,7 @@ from app.services.org import get_courses_for_faculty, get_faculty_for_unit
 from app.services.unit_ids import is_named_unit_id
 from app.services.unit_labels import attendance_option_name_for_faculty_roster
 from app.services.people import (
+    set_adjunct_for_people,
     create_person,
     deactivate_person,
     display_last_name,
@@ -343,7 +347,7 @@ async def list_attendance_units(
 @router.get("/attendance/{unit_id}", response_model=AttendanceSnapshot)
 async def get_attendance(
     unit_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -366,7 +370,7 @@ async def get_attendance(
 async def create_absence(
     unit_id: int,
     body: AbsenceEntryCreate,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -385,7 +389,7 @@ async def patch_absence(
     unit_id: int,
     entry_id: int,
     body: AbsenceEntryPatch,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -405,7 +409,7 @@ async def patch_absence(
 async def remove_absence(
     unit_id: int,
     entry_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -423,7 +427,7 @@ async def remove_absence(
 async def get_people(
     unit_id: int,
     include_inactive: bool = Query(False),
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -441,7 +445,7 @@ async def get_people(
 async def add_person(
     unit_id: int,
     body: PersonRosterWrite,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -472,7 +476,7 @@ async def patch_person(
     unit_id: int,
     person_id: int,
     body: PersonRosterPatch,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -497,11 +501,48 @@ async def patch_person(
     return person_to_read(person)
 
 
+@router.post("/attendance/{unit_id}/people/adjunct")
+async def set_people_adjunct(
+    unit_id: int,
+    body: PersonAdjunctBulkUpdate,
+    report_date: date = Query(default_factory=today_msk),
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    await ensure_schema_patches(session)
+    unit = await _require_writable_unit(session, user, unit_id, report_date)
+    if unit.type != UnitType.FACULTY or is_named_unit_id(unit.id):
+        raise HTTPException(
+            400,
+            "Отметка адъюнктов доступна только для списка офицеров факультета",
+        )
+    if not body.person_ids:
+        raise HTTPException(400, "Выберите людей из списка")
+    try:
+        updated = await set_adjunct_for_people(
+            session, unit_id, body.person_ids, body.is_adjunct
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    await _notify_attendance(session, unit_id, report_date)
+    await log_action(
+        session,
+        user.auth_kind,
+        user.user_id or user.duty_post_id or 0,
+        user.display_name,
+        "set_adjunct",
+        "unit",
+        unit_id,
+        f"updated={updated} is_adjunct={body.is_adjunct}",
+    )
+    return {"ok": True, "updated": updated}
+
+
 @router.delete("/attendance/{unit_id}/people/{person_id}", response_model=PersonRead)
 async def remove_person(
     unit_id: int,
     person_id: int,
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -537,7 +578,7 @@ async def _read_upload(file: UploadFile) -> tuple[str, bytes]:
 async def import_people_preview(
     unit_id: int,
     mode: str = Query("upsert"),
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -555,7 +596,7 @@ async def import_people_preview(
 async def import_people(
     unit_id: int,
     mode: str = Query("upsert"),
-    report_date: date = Query(default_factory=date.today),
+    report_date: date = Query(default_factory=today_msk),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
