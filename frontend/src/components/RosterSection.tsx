@@ -22,6 +22,7 @@ import {
   formatRank,
 } from "../constants/ranks";
 import { compareAbsenceEntries, compareDepartments } from "../utils/rosterSort";
+import { departmentRosterLabel } from "../utils/departmentLabel";
 
 type ImportMode = "upsert" | "replace";
 type SickDraft = { person_id: number; hospital_id: number | null; note: string };
@@ -595,8 +596,8 @@ export function RosterSection({
           <p className="text-sm text-gray-600 mb-3">
             Список можно загрузить из файла Word (.docx) или Excel (.xlsx). В таблице нужны колонки
             «Воинское звание» и «Фамилия, имя, отчество». Кафедру укажите отдельной колонкой, если
-            она есть. Можно начать с колонки «№». Воинское звание и ФИО пишите полностью: без сокращений и
-            без инициалов.
+            она есть: номер кафедры или «управление факультета» двумя словами. Можно начать с колонки «№».
+            Воинское звание и ФИО пишите полностью: без сокращений и без инициалов.
           </p>
 
           <div className="flex flex-wrap gap-3 mb-3 items-center">
@@ -657,8 +658,8 @@ export function RosterSection({
                   <input
                     value={newDepartment}
                     onChange={(e) => setNewDepartment(e.target.value)}
-                    placeholder="61"
-                    className="border rounded px-2 py-1 text-sm w-20"
+                    placeholder="61 или управление факультета"
+                    className="border rounded px-2 py-1 text-sm w-56"
                   />
                 </div>
               </div>
@@ -856,7 +857,7 @@ export function RosterSection({
                     )}
                     <td>{i + 1}</td>
                     <td>{formatRank(person.rank)}</td>
-                    <td>{person.department_code || "—"}</td>
+                    <td>{departmentRosterLabel(person.department_code)}</td>
                     <td>{person.display_name || person.full_name}</td>
                     <td>{reasonForPerson(person.id)}</td>
                     {showActionColumn && (

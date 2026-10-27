@@ -17,7 +17,6 @@ from app.models import (
     AbsenceCategory,
     AbsenceEntry,
     CourseReport,
-    DutyPost,
     FacultyReport,
     Hospital,
     Person,
@@ -237,34 +236,12 @@ async def ensure_schema_patches(session: AsyncSession) -> None:
     if present_cat and present_cat.label == "Налицо":
         present_cat.label = "На лицо"
 
-    from app.services.unit_ids import LOCATION_NAMES, course_display_name, parse_course_id
+    from app.services.unit_ids import LOCATION_NAMES
 
     for loc_id, loc_name in LOCATION_NAMES.items():
         loc = await session.get(Unit, loc_id)
         if loc and loc.name != loc_name:
             loc.name = loc_name
-
-    courses = await session.execute(
-        select(Unit).where(Unit.type == UnitType.COURSE, Unit.is_active.is_(True))
-    )
-    for unit in courses.scalars():
-        try:
-            faculty_number, course_number = parse_course_id(unit.id)
-        except ValueError:
-            continue
-        new_name = course_display_name(faculty_number, course_number)
-        if unit.name != new_name:
-            unit.name = new_name
-        dpk = await session.scalar(
-            select(DutyPost).where(
-                DutyPost.unit_id == unit.id,
-                DutyPost.post_type == DutyPostType.DPK,
-            )
-        )
-        if dpk:
-            dpk_name = f"ДПК — {new_name}"
-            if dpk.name != dpk_name:
-                dpk.name = dpk_name
 
     await session.flush()
 

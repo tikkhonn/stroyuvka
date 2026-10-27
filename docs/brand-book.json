@@ -1,0 +1,367 @@
+{
+  "schemaVersion": "1",
+  "meta": {
+    "id": "vka-academy-design-system",
+    "title": "Дизайн-система ВКА им. А.Ф. Можайского",
+    "version": "1.1.0",
+    "locale": "ru-RU",
+    "intendedUse": "Переносимый брендбук для любых веб-проектов академии. Не привязан к одному продукту или кодовой базе.",
+    "instructionsForAI": [
+      "Применяй эту систему ко всем новым экранам, если пользователь приложил этот JSON или сослался на «дизайн ВКА / ПУЛЬС-стиль».",
+      "Стек по умолчанию: React + Tailwind CSS; токены из секции tailwindExtend вставляй в theme.extend без переименования ключей vka-*.",
+      "Display-шрифт Magistral — только заголовки, название продукта, акцентные подписи institуции; весь остальной UI — Montserrat.",
+      "Основная пара: тёмно-синий navy + золотой gold на светлом cream; не заменяй на generic blue/amber.",
+      "Шапка и футер — navy с золотой линией-акцентом; контент — cream/white карточки с мягкой тенью.",
+      "Primary CTA на светлом фоне — gold с navy текстом; вторичная/опасная — navy или нейтральная обводка.",
+      "Логотип: на navy — белая версия; на white/cream — цветная; высота задаётся только по одной оси, пропорции сохранять.",
+      "Экран входа: тёмный радиальный фон, опционально силуэт здания (screen blend), белая карточка формы, крупный логотип сверху.",
+      "Таблицы данных: шапка navy/white, зебра строк, компактный text-sm; не Material-style rounded tables.",
+      "Семантика success/error — мягкие pastel блоки; для «позитивного KPI» допустим emerald, не перебивающий gold."
+    ]
+  },
+  "brandCharacter": {
+    "tone": ["официальный", "академический", "спокойный", "доверительный"],
+    "avoid": [
+      "яркие неоновые акценты",
+      "чистый чёрный (#000) для текста",
+      "скругления pill-only UI без структуры",
+      "sans-serif в крупных заголовках вместо Magistral",
+      "логотип на busy-фоне без контрастной подложки"
+    ],
+    "institutionName": "ВКА им. А.Ф. Можайского",
+    "productNamingHint": "Название цифрового продукта — Magistral, bold; при двух частях допустим разделитель «.» без пробела (например ПУЛЬС.ВКА). Подзаголовок — uppercase, semibold, золото на тёмном или gold/accent на светлом."
+  },
+  "designTokens": {
+    "colors": {
+      "navy": { "hex": "#2A3F5F", "token": "vka-navy" },
+      "navyLight": { "hex": "#54657F", "token": "vka-navy-light" },
+      "gold": { "hex": "#E6BD75", "token": "vka-gold" },
+      "goldLight": { "hex": "#EBCA91", "token": "vka-gold-light" },
+      "gray": { "hex": "#A4AEBE", "token": "vka-gray" },
+      "grayBorder": { "hex": "#D2D7DF", "token": "vka-gray-50" },
+      "cream": { "hex": "#F3F5F8", "token": "vka-cream" },
+      "accentBrightGold": {
+        "hex": "#F5C451",
+        "token": null,
+        "note": "Усиленное золото для коротких uppercase-подзаголовов на auth и hero"
+      },
+      "onDark": {
+        "primaryText": "#FFFFFF",
+        "secondaryText": "vka-gray или white/70",
+        "mutedAccent": "vka-gold at 90% opacity"
+      },
+      "onLight": {
+        "primaryText": "vka-navy",
+        "secondaryText": "#4B5563",
+        "placeholder": "#9CA3AF"
+      }
+    },
+    "surfaces": {
+      "pageBackground": {
+        "base": "vka-cream",
+        "optionalGlow": "radial-gradient ellipse 120% 80% at 50% -20%, rgba(230, 189, 117, 0.08), transparent 50%)"
+      },
+      "card": {
+        "background": "#FFFFFF",
+        "border": "vka-gray-50 или gray-200/80",
+        "shadow": "shadow.vka"
+      },
+      "authBackdrop": {
+        "radial": "radial-gradient(circle at 50% 45%, #0e3963 0%, #051d44 100%)",
+        "overlay": "linear-gradient(180deg, rgba(5,29,68,0.35) 0%, rgba(5,29,68,0.15) 40%, rgba(5,29,68,0.55) 100%)",
+        "heroImageBlend": "mix-blend-mode: screen; background-position: bottom"
+      },
+      "authCard": {
+        "background": "#FFFFFF",
+        "border": "1px solid rgba(255,255,255,0.25)",
+        "maxWidthPx": 420,
+        "paddingPx": 32,
+        "radiusRem": 1,
+        "shadow": "shadow.vka-lg"
+      }
+    },
+    "typography": {
+      "families": {
+        "display": {
+          "name": "Magistral",
+          "cssStack": "Magistral, Montserrat, system-ui, sans-serif",
+          "source": "локальные .ttf (лицензия организации)",
+          "files": [
+            "Magistral-Medium.ttf",
+            "Magistral-MediumItalic.ttf",
+            "Magistral-Bold.ttf",
+            "Magistral-BoldItalic.ttf"
+          ],
+          "fontFaceWeights": {
+            "medium": "400-500",
+            "bold": "600-800"
+          }
+        },
+        "body": {
+          "name": "Montserrat",
+          "cssStack": "Montserrat, system-ui, sans-serif",
+          "source": "Google Fonts",
+          "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap",
+          "weights": [400, 500, 600, 700]
+        },
+        "mono": {
+          "cssStack": "ui-monospace, SFMono-Regular, monospace",
+          "use": "номера телефонов, коды, tabular data"
+        }
+      },
+      "roles": {
+        "h1Page": {
+          "family": "display",
+          "sizeRem": { "mobile": 1.5, "desktop": 1.875 },
+          "weight": 700,
+          "color": "vka-navy",
+          "letterSpacing": "-0.025em"
+        },
+        "h2Section": {
+          "family": "display",
+          "sizeRem": 1.25,
+          "weight": 700,
+          "color": "vka-navy"
+        },
+        "h3Card": {
+          "family": "display",
+          "sizeRem": 1.125,
+          "weight": 700,
+          "color": "vka-navy"
+        },
+        "overline": {
+          "family": "body",
+          "sizeRem": 0.875,
+          "weight": 600,
+          "transform": "uppercase",
+          "letterSpacing": "0.05em",
+          "color": "vka-navy"
+        },
+        "body": { "family": "body", "sizeRem": 0.875, "weight": 400, "color": "vka-navy" },
+        "bodyLarge": { "family": "body", "sizeRem": 1, "weight": 400 },
+        "caption": { "family": "body", "sizeRem": 0.75, "weight": 400 },
+        "headerTitle": {
+          "family": "display",
+          "sizeRem": { "mobile": 1.125, "desktop": 1.25 },
+          "weight": 700,
+          "color": "#FFFFFF"
+        },
+        "authProductTitle": {
+          "family": "display",
+          "sizeRem": 1.875,
+          "weight": 700,
+          "color": "vka-navy"
+        },
+        "authTagline": {
+          "family": "body",
+          "sizePx": { "mobile": 20, "smBreakpoint": 14 },
+          "weight": 600,
+          "transform": "uppercase",
+          "letterSpacingEm": { "mobile": 0.04, "sm": 0.06 },
+          "color": "#F5C451",
+          "textShadow": "0 1px 2px rgba(230, 189, 117, 0.35)"
+        },
+        "footerInstitution": {
+          "family": "display",
+          "sizeRem": 0.875,
+          "color": "vka-gold at 90%"
+        }
+      }
+    },
+    "spacing": {
+      "unitPx": 4,
+      "pagePaddingX": 16,
+      "sectionGap": 32,
+      "cardPadding": 20,
+      "formFieldGap": 12,
+      "navGap": 6
+    },
+    "radii": {
+      "sm": "0.375rem",
+      "md": "0.5rem",
+      "lg": "0.75rem",
+      "xl": "1rem",
+      "2xl": "1rem"
+    },
+    "shadows": {
+      "vka": "0 4px 24px -4px rgba(42, 63, 95, 0.12)",
+      "vkaLg": "0 20px 50px -12px rgba(42, 63, 95, 0.2)",
+      "vkaGlow": "0 0 40px -8px rgba(230, 189, 117, 0.4)"
+    },
+    "motion": {
+      "entrance": {
+        "name": "slideUp",
+        "durationMs": 500,
+        "easing": "ease-out",
+        "from": { "opacity": 0, "translateY": "12px" },
+        "to": { "opacity": 1, "translateY": "0" }
+      },
+      "interactive": { "durationMs": 200, "easing": "default" }
+    },
+    "layout": {
+      "contentMaxWidthRem": 80,
+      "narrowContentMaxWidthRem": 64,
+      "header": {
+        "sticky": true,
+        "background": "vka-navy",
+        "borderBottom": "2px solid vka-gold",
+        "verticalPaddingPx": 12
+      },
+      "footer": {
+        "background": "vka-navy",
+        "borderTop": "1px solid rgba(230, 189, 117, 0.2)",
+        "verticalPaddingPx": 32
+      }
+    }
+  },
+  "logo": {
+    "aspectRatio": "521:488",
+    "variants": [
+      {
+        "id": "color",
+        "filename": "logo.png",
+        "when": "светлый фон (white, cream), favicon, печать на белом"
+      },
+      {
+        "id": "white",
+        "filename": "logo-white.png",
+        "when": "navy фон, auth hero, header, footer"
+      }
+    ],
+    "recommendedHeightsPx": {
+      "compact": 32,
+      "header": 40,
+      "heroAuth": 80
+    },
+    "rules": [
+      "Масштабировать только пропорционально (фиксированная height, width auto).",
+      "Не recolor, не обводить, не класть color-логотип на navy без подложки.",
+      "На фото-фоне auth допустим mix-blend-mode: screen для white-версии."
+    ],
+    "favicon": "logo.png"
+  },
+  "optionalHeroImagery": {
+    "description": "Силуэт главного корпуса / символики академии для auth",
+    "filenameExample": "login-title-bg.png",
+    "treatment": "full-bleed, bottom-aligned, screen blend поверх radial navy"
+  },
+  "uiPatterns": {
+    "appShell": {
+      "structure": "sticky header (navy) → cream main → navy footer",
+      "mainNavigation": "pill buttons in header; active = gold bg + navy text; idle = muted on navy"
+    },
+    "buttons": {
+      "primaryGold": {
+        "background": "vka-gold",
+        "text": "vka-navy",
+        "radius": "md",
+        "paddingPx": { "x": 16, "y": 10 },
+        "fontSizeRem": 0.875,
+        "fontWeight": 600,
+        "hover": { "background": "vka-gold-light", "shadow": "vkaGlow" }
+      },
+      "primaryNavy": {
+        "background": "vka-navy",
+        "text": "#FFFFFF",
+        "hover": { "background": "vka-navy-light" }
+      },
+      "ghostOnNavy": {
+        "border": "white/20",
+        "text": "gray-300",
+        "hover": { "border": "vka-gold/50", "text": "#FFFFFF" }
+      }
+    },
+    "formControls": {
+      "input": {
+        "background": "#FFFFFF",
+        "border": "gray-200/80",
+        "radius": "md",
+        "paddingPx": { "x": 16, "y": 10 },
+        "fontSizeRem": 0.875,
+        "focus": { "border": "vka-gold", "ring": "vka-gold 25% opacity" }
+      },
+      "segmentedTabs": {
+        "track": "gray-100/90, radius xl, padding 4px",
+        "activeSegment": "vka-navy bg, white text, shadow md",
+        "inactiveSegment": "gray-600 text, hover navy"
+      }
+    },
+    "cards": {
+      "default": "white, border light gray, radius lg–xl, shadow vka",
+      "stat": "white card + 4px top bar in category color or navy/gold"
+    },
+    "tables": {
+      "headerRow": { "background": "vka-navy", "text": "#FFFFFF", "fontWeight": 600, "fontSizeRem": 0.875 },
+      "bodyCell": { "fontSizeRem": 0.875, "paddingPx": { "x": 12, "y": 10 } },
+      "zebra": ["#FFFFFF", "rgba(249,250,251,0.8)"],
+      "border": "gray-200/80"
+    },
+    "feedback": {
+      "success": { "bg": "#ecfdf5", "text": "#064e3b", "border": "#d1fae5" },
+      "error": { "bg": "#fef2f2", "text": "#7f1d1d", "border": "#fee2e2" },
+      "badge": "rounded-full, text-xs, semibold, subtle ring"
+    }
+  },
+  "chartPalette": {
+    "description": "8 различимых серий для диаграмм и категорий (если нужна цветовая кодировка сущностей)",
+    "series": [
+      "#1d4ed8",
+      "#0f766e",
+      "#4d7c0f",
+      "#b91c1c",
+      "#b45309",
+      "#c2410c",
+      "#a21caf",
+      "#334155"
+    ],
+    "positiveKpi": "#059669"
+  },
+  "tailwindExtend": {
+    "colors": {
+      "vka": {
+        "navy": "#2A3F5F",
+        "navy-light": "#54657F",
+        "gold": "#E6BD75",
+        "gold-light": "#EBCA91",
+        "gray": "#A4AEBE",
+        "gray-50": "#D2D7DF",
+        "cream": "#F3F5F8"
+      }
+    },
+    "fontFamily": {
+      "serif": ["Magistral", "Montserrat", "system-ui", "sans-serif"],
+      "sans": ["Montserrat", "system-ui", "sans-serif"]
+    },
+    "boxShadow": {
+      "vka": "0 4px 24px -4px rgba(42, 63, 95, 0.12)",
+      "vka-lg": "0 20px 50px -12px rgba(42, 63, 95, 0.2)",
+      "vka-glow": "0 0 40px -8px rgba(230, 189, 117, 0.4)"
+    },
+    "keyframes": {
+      "slideUp": {
+        "0%": { "opacity": "0", "transform": "translateY(12px)" },
+        "100%": { "opacity": "1", "transform": "translateY(0)" }
+      }
+    },
+    "animation": {
+      "slide-up": "slideUp 0.5s ease-out forwards"
+    },
+    "utilityAliases": {
+      "pageTitle": "text-2xl md:text-3xl font-bold text-vka-navy tracking-tight font-serif",
+      "sectionTitle": "text-xl font-serif font-bold text-vka-navy",
+      "btnGold": "inline-flex items-center justify-center rounded-lg bg-vka-gold px-4 py-2.5 text-sm font-semibold text-vka-navy shadow-md hover:bg-vka-gold-light"
+    }
+  },
+  "assetsBundle": {
+    "description": "Скопируй в public/ нового проекта",
+    "files": [
+      "brand/logo.png",
+      "brand/logo-white.png",
+      "fonts/Magistral-Medium.ttf",
+      "fonts/Magistral-MediumItalic.ttf",
+      "fonts/Magistral-Bold.ttf",
+      "fonts/Magistral-BoldItalic.ttf"
+    ],
+    "optional": ["images/login-title-bg.png"]
+  }
+}

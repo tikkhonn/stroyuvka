@@ -512,6 +512,24 @@ export interface UnitNode {
   children?: UnitNode[];
 }
 
+export interface RosterStatusUnit {
+  unit_id: number;
+  name: string;
+  kind: "officers" | "course" | string;
+  people_count: number;
+  loaded: boolean;
+}
+
+export interface RosterStatusFaculty {
+  faculty_id: number;
+  name: string;
+  is_named: boolean;
+  loaded_count: number;
+  total_count: number;
+  loaded_percent: number;
+  units: RosterStatusUnit[];
+}
+
 export interface AuditEntry {
   id: number;
   actor_name: string;

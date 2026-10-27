@@ -331,6 +331,14 @@ export function AttendancePage() {
   const canSubmitCourse = session?.role === "dpk";
   const isDpf = session?.role === "dpf";
   const isOfficersRoster = selectedMeta?.kind === "officers";
+  const facultyRosterName = (
+    snapshot?.unit_name ||
+    selectedMeta?.name.replace(/^Офицеры\s*·\s*/, "") ||
+    "..."
+  ).trim();
+  const attendanceTitle = isOfficersRoster
+    ? `Расход офицеров ${facultyRosterName}`
+    : `Расход — ${snapshot?.unit_name || selectedMeta?.name || "..."}`;
   const enableRosterSort = session?.role === "dpk" || session?.role === "dpf";
   const isAdmin = session?.shell === "admin";
   const showSubmittedStatus = (canSubmitCourse || isDpf) && snapshot;
@@ -382,7 +390,7 @@ export function AttendancePage() {
       <div className="flex flex-wrap items-center gap-4 mb-4">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-serif font-bold text-vka-navy">
-            Расход — {snapshot?.unit_name || selectedMeta?.name || "..."}
+            {attendanceTitle}
           </h2>
           {isDpf ? unitSelector : submittedStatusEl}
         </div>

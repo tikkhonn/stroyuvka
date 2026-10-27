@@ -714,7 +714,7 @@ async def build_stroevka_print(
             )
             if not dept:
                 raise ValueError(
-                    f"Кафедра {department_display_name(normalized_dept)} "
+                    f"{department_display_name(normalized_dept)} "
                     "не найдена в списке офицеров"
                 )
             summary_rows = [(dept.name, dept.aggregate)]

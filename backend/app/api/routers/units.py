@@ -16,6 +16,7 @@ from app.schemas import (
     FacultyCreate,
     NamedUnitCreate,
     OfficerGroupCreate,
+    RosterStatusFaculty,
     UnitCreate,
     UnitRead,
     UnitUpdate,
@@ -36,6 +37,7 @@ from app.services.faculty_admin import (
     reset_osh_structure,
 )
 from app.services.org import build_faculty_tree, build_location_tree, build_unit_tree
+from app.services.roster_status import list_roster_status
 from app.services.unit_ids import (
     LOCATION_NAMES,
     NAMED_UNIT_ID_BASE,
@@ -83,6 +85,14 @@ async def remove_all_courses(
         "delete_all_courses",
     )
     return {"ok": True, "deleted_courses": count}
+
+
+@router.get("/roster-status", response_model=list[RosterStatusFaculty])
+async def roster_status(
+    session: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_shell("admin")),
+):
+    return await list_roster_status(session)
 
 
 @router.get("/tree")

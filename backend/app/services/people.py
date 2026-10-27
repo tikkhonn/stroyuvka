@@ -159,9 +159,21 @@ def normalize_department_code(value: str | None) -> str | None:
     return cleaned or None
 
 
+_FACULTY_ADMIN_CODE = re.compile(r"^управлен(?:ие|ия)\d*факультета$", re.UNICODE)
+
+
+def is_faculty_administration_code(code: str | None) -> bool:
+    if not code:
+        return False
+    compact = re.sub(r"[^\w]", "", str(code), flags=re.UNICODE).casefold()
+    return bool(compact and _FACULTY_ADMIN_CODE.fullmatch(compact))
+
+
 def department_display_name(code: str | None) -> str:
     if not code:
         return "Без кафедры"
+    if is_faculty_administration_code(code):
+        return "Управление факультета"
     return f"Кафедра {code}"
 
 

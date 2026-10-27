@@ -3,18 +3,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import AuthKind, DutyPostType
-from app.models import ChatMessage
+from app.models import ChatMessage, Unit
 from app.schemas import AuthUser
-from app.services.unit_ids import course_display_name, parse_course_id
 from app.ws.manager import ws_manager
 
 
-def course_chat_label(course_id: int) -> str:
-    try:
-        faculty_number, course_number = parse_course_id(course_id)
-        return course_display_name(faculty_number, course_number)
-    except ValueError:
-        return f"{course_id} курс"
+async def course_chat_label(session: AsyncSession, course_id: int) -> str:
+    unit = await session.get(Unit, course_id)
+    if unit and unit.name:
+        return unit.name
+    return f"{course_id} курс"
 
 
 def faculty_chat_label(faculty_id: int) -> str:
@@ -104,7 +102,7 @@ async def notify_dpk_stroevka_submitted(
     course_id: int,
     faculty_id: int,
 ) -> None:
-    label = course_chat_label(course_id)
+    label = await course_chat_label(session, course_id)
     body = f"{label}: отправлена строевая записка."
     await post_faculty_chat_message(
         session,
@@ -124,7 +122,7 @@ async def notify_dpk_stroevka_updated(
 ) -> None:
     if user.post_type != DutyPostType.DPK.value:
         return
-    label = course_chat_label(course_id)
+    label = await course_chat_label(session, course_id)
     body = f"{label}: обновлена строевая записка."
     await post_faculty_chat_message(
         session,

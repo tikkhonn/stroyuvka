@@ -15,6 +15,7 @@ import { AdminUnitsPage, AuditPage } from "../pages/AdminPages";
 import { AdminHospitalsPage } from "../pages/AdminHospitalsPage";
 import { AdminLandlinePhonesPage } from "../pages/AdminLandlinePhonesPage";
 import { AdminDutyContactsPage } from "../pages/AdminDutyContactsPage";
+import { AdminRosterStatusPage } from "../pages/AdminRosterStatusPage";
 import { ChiefOverviewPage } from "../pages/ChiefOverviewPage";
 import { ChiefTrendsPage } from "../pages/ChiefTrendsPage";
 import { homePath } from "../lib/homePath";
@@ -177,6 +178,14 @@ export function AppRouter() {
           element={
             <RequireShell shells={["admin"]}>
               <AdminUnitsPage />
+            </RequireShell>
+          }
+        />
+        <Route
+          path="/admin/rosters"
+          element={
+            <RequireShell shells={["admin"]}>
+              <AdminRosterStatusPage />
             </RequireShell>
           }
         />

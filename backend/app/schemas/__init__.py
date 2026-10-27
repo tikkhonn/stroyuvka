@@ -117,6 +117,24 @@ class CourseBulkResult(BaseModel):
     skipped: list[CourseBulkSkippedItem]
 
 
+class RosterStatusUnit(BaseModel):
+    unit_id: int
+    name: str
+    kind: str
+    people_count: int
+    loaded: bool
+
+
+class RosterStatusFaculty(BaseModel):
+    faculty_id: int
+    name: str
+    is_named: bool
+    loaded_count: int
+    total_count: int
+    loaded_percent: int
+    units: list[RosterStatusUnit]
+
+
 # --- People ---
 
 
